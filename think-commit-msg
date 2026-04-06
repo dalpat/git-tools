@@ -1,0 +1,114 @@
+#!/bin/bash
+
+set -euo pipefail
+
+MODEL_API="${MODEL_API:-gemini}"
+GEMINI_API_KEY="${GEMINI_API_KEY:-}"
+GROQ_API_KEY="${GROQ_API_KEY:-}"
+GROQ_MODEL="${GROQ_MODEL:-mixtral-8x7b-32768}"
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0")
+
+Generate AI-powered commit messages from staged git changes.
+
+Requirements:
+  - staged git changes (git add)
+  - jq, curl
+  - API key (GEMINI_API_KEY or GROQ_API_KEY)
+
+Environment:
+  MODEL_API        "gemini" or "groq" (default: gemini)
+  GEMINI_API_KEY   Your Gemini API key
+  GROQ_API_KEY     Your Groq API key
+  GROQ_MODEL       Groq model to use (default: mixtral-8x7b-32768)
+
+EOF
+}
+
+if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
+    usage
+    exit 0
+fi
+
+if [[ -z "$GEMINI_API_KEY" ]] && [[ -z "$GROQ_API_KEY" ]]; then
+    echo "Error: Set GEMINI_API_KEY or GROQ_API_KEY env var"
+    exit 1
+fi
+
+STAGED_FILES=$(git diff --cached --name-only)
+
+if [[ -z "$STAGED_FILES" ]]; then
+    echo "Error: No staged changes. Run 'git add' first."
+    exit 1
+fi
+
+echo "Staged Files:"
+echo "-------------"
+echo "$STAGED_FILES"
+echo ""
+
+GIT_DIFF=$(git diff --cached)
+
+PROMPT="Staged files:
+$STAGED_FILES
+
+Staged changes:
+$GIT_DIFF
+
+Suggest a short, clear Git commit message (imperative mood, max 72 chars)."
+
+if [[ "$MODEL_API" == "gemini" ]]; then
+    if [[ -z "$GEMINI_API_KEY" ]]; then
+        echo "Error: GEMINI_API_KEY not set"
+        exit 1
+    fi
+
+    RESPONSE=$(curl -s -X POST \
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=$GEMINI_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{\"contents\": [{\"parts\": [{\"text\": \"$PROMPT\"}]}]}")
+
+    if ! echo "$RESPONSE" | jq -e '.candidates[0].content.parts[0].text' >/dev/null 2>&1; then
+        echo "Error: API call failed"
+        echo "$RESPONSE"
+        exit 1
+    fi
+
+    COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text')
+
+elif [[ "$MODEL_API" == "groq" ]]; then
+    if [[ -z "$GROQ_API_KEY" ]]; then
+        echo "Error: GROQ_API_KEY not set"
+        exit 1
+    fi
+
+    RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+        -H "Authorization: Bearer $GROQ_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"model\": \"$GROQ_MODEL\",
+            \"messages\": [
+                {\"role\": \"system\", \"content\": \"Write short, clear git commit messages in imperative mood, max 72 characters.\"},
+                {\"role\": \"user\", \"content\": \"$PROMPT\"}
+            ]
+        }")
+
+    if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+        echo "Error: API call failed"
+        echo "$RESPONSE"
+        exit 1
+    fi
+
+    COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+else
+    echo "Error: MODEL_API must be 'gemini' or 'groq'"
+    exit 1
+fi
+
+echo ""
+echo "Suggested Commit Message:"
+echo "-------------------------"
+echo "$COMMIT_MSG"
+echo ""
