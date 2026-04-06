@@ -15,12 +15,12 @@ chmod +x think-commit-msg
 Add to your `~/.bashrc` or `~/.zshrc` (choose one):
 
 ```bash
-# For Gemini (default)
-export GEMINI_API_KEY="your-key"
-
-# Or for Groq
+# For Groq (default)
 export GROQ_API_KEY="your-key"
-export MODEL_API="groq"
+
+# Or for Gemini
+export GEMINI_API_KEY="your-key"
+export MODEL_API="gemini"
 ```
 
 Then run: `source ~/.bashrc` or `source ~/.zshrc`
@@ -65,7 +65,7 @@ Optional environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MODEL_API` | `gemini` | Provider: `gemini` or `groq` |
+| `MODEL_API` | `groq` | Provider: `gemini` or `groq` |
 | `GROQ_MODEL` | `llama-3.1-70b-versatile` | Groq model to use |
 
 ## Features
