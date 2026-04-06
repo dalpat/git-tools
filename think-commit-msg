@@ -15,7 +15,9 @@ Default format: Conventional Commits (https://www.conventionalcommits.org)
 Options:
   -s, --simple          Use simple commit message format (not conventional)
   -v, --verbose         Show staged files before commit message
-  -h, --help            Show this help
+  -l, --list           List available Groq models
+  -m, --model MODEL    Use specific model (default: llama-3.3-70b-versatile)
+  -h, --help           Show this help
 
 Requirements:
   - staged git changes (git add)
@@ -31,6 +33,7 @@ EOF
 
 SIMPLE=0
 VERBOSE=0
+LIST_MODELS=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -41,6 +44,14 @@ while [[ $# -gt 0 ]]; do
         -v|--verbose)
             VERBOSE=1
             shift
+            ;;
+        -l|--list)
+            LIST_MODELS=1
+            shift
+            ;;
+        -m|--model)
+            GROQ_MODEL="$2"
+            shift 2
             ;;
         -h|--help)
             usage
@@ -56,6 +67,20 @@ done
 if [[ -z "$GROQ_API_KEY" ]]; then
     echo "Error: Set GROQ_API_KEY env var" >&2
     exit 1
+fi
+
+if [[ "$LIST_MODELS" -eq 1 ]]; then
+    RESPONSE=$(curl -s "https://api.groq.com/openai/v1/models" \
+        -H "Authorization: Bearer $GROQ_API_KEY")
+    
+    if ! echo "$RESPONSE" | jq -e '.data' >/dev/null 2>&1; then
+        echo "Error: Failed to fetch models" >&2
+        echo "$RESPONSE" >&2
+        exit 1
+    fi
+    
+    echo "$RESPONSE" | jq -r '.data[] | "\(.id)"' | sort
+    exit 0
 fi
 
 STAGED_FILES=$(git diff --cached --name-only)

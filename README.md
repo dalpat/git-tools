@@ -36,6 +36,12 @@ think-commit-msg --simple
 
 # Show staged files before commit message
 think-commit-msg --verbose
+
+# List available Groq models
+think-commit-msg --list
+
+# Use specific model
+think-commit-msg --model llama-3.1-8b-instant
 ```
 
 The script outputs only the commit message (safe for scripting):
@@ -71,5 +77,7 @@ Optional environment variables:
 
 - Conventional Commits format by default
 - Clean output for safe scripting
+- List available models with `--list`
+- Use specific model with `--model`
 - Validates API key before making requests
 - Handles API errors gracefully
