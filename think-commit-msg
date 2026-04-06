@@ -5,7 +5,7 @@ set -euo pipefail
 MODEL_API="${MODEL_API:-gemini}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GROQ_API_KEY="${GROQ_API_KEY:-}"
-GROQ_MODEL="${GROQ_MODEL:-mixtral-8x7b-32768}"
+GROQ_MODEL="${GROQ_MODEL:-llama-3.1-70b-versatile}"
 
 usage() {
     cat <<EOF
@@ -27,7 +27,7 @@ Environment:
   MODEL_API        "gemini" or "groq" (default: gemini)
   GEMINI_API_KEY   Your Gemini API key
   GROQ_API_KEY     Your Groq API key
-  GROQ_MODEL       Groq model to use (default: mixtral-8x7b-32768)
+  GROQ_MODEL       Groq model to use (default: llama-3.1-70b-versatile)
 
 EOF
 }
@@ -101,7 +101,7 @@ if [[ "$MODEL_API" == "gemini" ]]; then
     fi
 
     RESPONSE=$(curl -s -X POST \
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=$GEMINI_API_KEY" \
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
         -H "Content-Type: application/json" \
         -d "{\"contents\": [{\"parts\": [{\"text\": \"$PROMPT\"}]}]}")
 

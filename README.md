@@ -66,7 +66,7 @@ Optional environment variables:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MODEL_API` | `gemini` | Provider: `gemini` or `groq` |
-| `GROQ_MODEL` | `mixtral-8x7b-32768` | Groq model to use |
+| `GROQ_MODEL` | `llama-3.1-70b-versatile` | Groq model to use |
 
 ## Features
 
