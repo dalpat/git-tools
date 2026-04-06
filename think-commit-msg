@@ -16,6 +16,7 @@ Default format: Conventional Commits (https://www.conventionalcommits.org)
 
 Options:
   -s, --simple          Use simple commit message format (not conventional)
+  -r, --raw             Output only the commit message (for scripting)
   -h, --help            Show this help
 
 Requirements:
@@ -33,11 +34,16 @@ EOF
 }
 
 SIMPLE=0
+RAW=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -s|--simple)
             SIMPLE=1
+            shift
+            ;;
+        -r|--raw)
+            RAW=1
             shift
             ;;
         -h|--help)
@@ -150,8 +156,12 @@ else
     exit 1
 fi
 
-echo ""
-echo "Suggested Commit Message:"
-echo "-------------------------"
-echo "$COMMIT_MSG"
-echo ""
+if [[ "$RAW" -eq 1 ]]; then
+    printf '%s' "$COMMIT_MSG"
+else
+    echo ""
+    echo "Suggested Commit Message:"
+    echo "-------------------------"
+    echo "$COMMIT_MSG"
+    echo ""
+fi

@@ -36,11 +36,16 @@ think-commit-msg
 
 # Use simple format instead
 think-commit-msg --simple
+
+# Raw output (for scripting)
+think-commit-msg --raw
 ```
 
 The script outputs the suggested commit message - copy it or run:
 ```bash
 git add . && git commit -m "$(think-commit-msg)"
+# Or with raw output for safer scripting
+git add . && git commit -m "$(think-commit-msg --raw)"
 ```
 
 ## Global Installation (optional)
