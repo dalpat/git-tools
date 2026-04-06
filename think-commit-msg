@@ -100,10 +100,12 @@ if [[ "$MODEL_API" == "gemini" ]]; then
         exit 1
     fi
 
+    JSONPayload=$(jq -n --arg prompt "$PROMPT" '{"contents": [{"parts": [{"text": $prompt}]}]}')
+    
     RESPONSE=$(curl -s -X POST \
         "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
         -H "Content-Type: application/json" \
-        -d "{\"contents\": [{\"parts\": [{\"text\": \"$PROMPT\"}]}]}")
+        -d "$JSONPayload")
 
     if ! echo "$RESPONSE" | jq -e '.candidates[0].content.parts[0].text' >/dev/null 2>&1; then
         echo "Error: API call failed"
@@ -125,16 +127,16 @@ elif [[ "$MODEL_API" == "groq" ]]; then
         SYSTEM_PROMPT="Generate ONLY the commit message in Conventional Commits format. No explanation, no code blocks, no prefixes. Format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore. Max 72 chars."
     fi
 
+    JSONPayload=$(jq -n \
+        --arg model "$GROQ_MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$PROMPT" \
+        '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+
     RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
         -H "Authorization: Bearer $GROQ_API_KEY" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"model\": \"$GROQ_MODEL\",
-            \"messages\": [
-                {\"role\": \"system\", \"content\": \"$SYSTEM_PROMPT\"},
-                {\"role\": \"user\", \"content\": \"$PROMPT\"}
-            ]
-        }")
+        -d "$JSONPayload")
 
     if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
         echo "Error: API call failed"
