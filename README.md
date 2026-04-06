@@ -2,28 +2,51 @@
 
 Generates smart commit messages using AI (Gemini or Groq).
 
+## Installation
+
+```bash
+git clone https://github.com/dalpat/git-tools.git
+cd git-tools
+chmod +x think-commit-msg
+```
+
+## Setup
+
+Add to your `~/.bashrc` or `~/.zshrc` (choose one):
+
+```bash
+# For Gemini (default)
+export GEMINI_API_KEY="your-key"
+
+# Or for Groq
+export GROQ_API_KEY="your-key"
+export MODEL_API="groq"
+```
+
+Then run: `source ~/.bashrc` or `source ~/.zshrc`
+
 ## Usage
 
 ```bash
-# Stage your changes first
+# Stage your changes
 git add .
 
 # Run the script
-./think-commit-msg
+think-commit-msg
 ```
 
-## Configuration
+The script outputs the suggested commit message - copy it or run:
+```bash
+git add . && git commit -m "$(think-commit-msg)"
+```
 
-Set environment variables:
+## Global Installation (optional)
 
 ```bash
-# Required (choose one)
-export GEMINI_API_KEY="your-key"   # Gemini (default)
-export GROQ_API_KEY="your-key"     # Groq
+sudo cp think-commit-msg /usr/local/bin/think-commit-msg
 
-# Optional
-export MODEL_API="gemini"          # or "groq" (default: gemini)
-export GROQ_MODEL="mixtral-8x7b-32768"  # Groq model
+# Then run anywhere
+think-commit-msg
 ```
 
 ## Requirements
@@ -32,6 +55,15 @@ export GROQ_MODEL="mixtral-8x7b-32768"  # Groq model
 - `jq`
 - `curl`
 - API key (Gemini or Groq)
+
+## Configuration
+
+Optional environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MODEL_API` | `gemini` | Provider: `gemini` or `groq` |
+| `GROQ_MODEL` | `mixtral-8x7b-32768` | Groq model to use |
 
 ## Features
 
