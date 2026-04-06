@@ -1,6 +1,6 @@
 # Git Commit Message Generator
 
-Generates smart commit messages using AI (Gemini or Groq).
+Generates smart commit messages using AI (Groq).
 
 ## Installation
 
@@ -12,18 +12,15 @@ chmod +x think-commit-msg
 
 ## Setup
 
-Add to your `~/.bashrc` or `~/.zshrc` (choose one):
+Add to your `~/.bashrc` or `~/.zshrc`:
 
 ```bash
-# For Groq (default)
 export GROQ_API_KEY="your-key"
-
-# Or for Gemini
-export GEMINI_API_KEY="your-key"
-export MODEL_API="gemini"
 ```
 
 Then run: `source ~/.bashrc` or `source ~/.zshrc`
+
+Get your free API key at: https://console.groq.com
 
 ## Usage
 
@@ -60,7 +57,7 @@ think-commit-msg
 - Git with staged changes
 - `jq`
 - `curl`
-- API key (Gemini or Groq)
+- Groq API key (free at https://console.groq.com)
 
 ## Configuration
 
@@ -68,13 +65,11 @@ Optional environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MODEL_API` | `groq` | Provider: `gemini` or `groq` |
 | `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model to use |
 
 ## Features
 
-- Supports both Gemini and Groq providers
 - Conventional Commits format by default
-- Validates API keys before making requests
-- Handles API errors gracefully
 - Clean output for safe scripting
+- Validates API key before making requests
+- Handles API errors gracefully

@@ -2,8 +2,6 @@
 
 set -euo pipefail
 
-MODEL_API="${MODEL_API:-groq}"
-GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GROQ_API_KEY="${GROQ_API_KEY:-}"
 GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
 
@@ -22,13 +20,11 @@ Options:
 Requirements:
   - staged git changes (git add)
   - jq, curl
-  - API key (GEMINI_API_KEY or GROQ_API_KEY)
+  - GROQ_API_KEY env var
 
 Environment:
-  MODEL_API        "gemini" or "groq" (default: groq)
-  GEMINI_API_KEY   Your Gemini API key
-  GROQ_API_KEY     Your Groq API key
-  GROQ_MODEL       Groq model to use (default: llama-3.3-70b-versatile)
+  GROQ_API_KEY   Your Groq API key
+  GROQ_MODEL     Groq model to use (default: llama-3.3-70b-versatile)
 
 EOF
 }
@@ -57,8 +53,8 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ -z "$GEMINI_API_KEY" ]] && [[ -z "$GROQ_API_KEY" ]]; then
-    echo "Error: Set GEMINI_API_KEY or GROQ_API_KEY env var" >&2
+if [[ -z "$GROQ_API_KEY" ]]; then
+    echo "Error: Set GROQ_API_KEY env var" >&2
     exit 1
 fi
 
@@ -102,60 +98,29 @@ Rules: imperative mood, max 72 chars, no body.
 Example: feat(auth): add login endpoint"
 fi
 
-if [[ "$MODEL_API" == "gemini" ]]; then
-    if [[ -z "$GEMINI_API_KEY" ]]; then
-        echo "Error: GEMINI_API_KEY not set" >&2
-        exit 1
-    fi
-
-    JSONPayload=$(jq -n --arg prompt "$PROMPT" '{"contents": [{"parts": [{"text": $prompt}]}]}')
-    
-    RESPONSE=$(curl -s -X POST \
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "$JSONPayload")
-
-    if ! echo "$RESPONSE" | jq -e '.candidates[0].content.parts[0].text' >/dev/null 2>&1; then
-        echo "Error: API call failed" >&2
-        echo "$RESPONSE" >&2
-        exit 1
-    fi
-
-    COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text')
-
-elif [[ "$MODEL_API" == "groq" ]]; then
-    if [[ -z "$GROQ_API_KEY" ]]; then
-        echo "Error: GROQ_API_KEY not set" >&2
-        exit 1
-    fi
-
-    if [[ "$SIMPLE" -eq 1 ]]; then
-        SYSTEM_PROMPT="Generate ONLY the commit message. No explanation, no code blocks, no prefixes. Short description in imperative mood, max 72 chars."
-    else
-        SYSTEM_PROMPT="Generate ONLY the commit message in Conventional Commits format. No explanation, no code blocks, no prefixes. Format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore. Max 72 chars."
-    fi
-
-    JSONPayload=$(jq -n \
-        --arg model "$GROQ_MODEL" \
-        --arg system "$SYSTEM_PROMPT" \
-        --arg user "$PROMPT" \
-        '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
-
-    RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
-        -H "Authorization: Bearer $GROQ_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "$JSONPayload")
-
-    if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
-        echo "Error: API call failed" >&2
-        echo "$RESPONSE" >&2
-        exit 1
-    fi
-
-    COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+if [[ "$SIMPLE" -eq 1 ]]; then
+    SYSTEM_PROMPT="Generate ONLY the commit message. No explanation, no code blocks, no prefixes. Short description in imperative mood, max 72 chars."
 else
-    echo "Error: MODEL_API must be 'gemini' or 'groq'" >&2
+    SYSTEM_PROMPT="Generate ONLY the commit message in Conventional Commits format. No explanation, no code blocks, no prefixes. Format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore. Max 72 chars."
+fi
+
+JSONPayload=$(jq -n \
+    --arg model "$GROQ_MODEL" \
+    --arg system "$SYSTEM_PROMPT" \
+    --arg user "$PROMPT" \
+    '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+
+RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+    -H "Authorization: Bearer $GROQ_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d "$JSONPayload")
+
+if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+    echo "Error: API call failed" >&2
+    echo "$RESPONSE" >&2
     exit 1
 fi
+
+COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
 printf '%s' "$COMMIT_MSG"
