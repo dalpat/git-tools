@@ -6,12 +6,17 @@ MODEL_API="${MODEL_API:-gemini}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GROQ_API_KEY="${GROQ_API_KEY:-}"
 GROQ_MODEL="${GROQ_MODEL:-mixtral-8x7b-32768}"
+CONVENTIONAL=0
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0")
+Usage: $(basename "$0") [OPTIONS]
 
 Generate AI-powered commit messages from staged git changes.
+
+Options:
+  -c, --conventional    Use Conventional Commits format
+  -h, --help             Show this help
 
 Requirements:
   - staged git changes (git add)
@@ -27,10 +32,22 @@ Environment:
 EOF
 }
 
-if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]]; then
-    usage
-    exit 0
-fi
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -c|--conventional)
+            CONVENTIONAL=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
 
 if [[ -z "$GEMINI_API_KEY" ]] && [[ -z "$GROQ_API_KEY" ]]; then
     echo "Error: Set GEMINI_API_KEY or GROQ_API_KEY env var"
@@ -51,13 +68,29 @@ echo ""
 
 GIT_DIFF=$(git diff --cached)
 
-PROMPT="Staged files:
+if [[ "$CONVENTIONAL" -eq 1 ]]; then
+    PROMPT="Staged files:
+$STAGED_FILES
+
+Staged changes:
+$GIT_DIFF
+
+Suggest a Git commit message in Conventional Commits format:
+- Format: <type>(<scope>): <description>
+- Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+- Use imperative mood, max 72 chars for subject
+- If body needed, add blank line after subject
+
+Example: feat(auth): add login endpoint"
+else
+    PROMPT="Staged files:
 $STAGED_FILES
 
 Staged changes:
 $GIT_DIFF
 
 Suggest a short, clear Git commit message (imperative mood, max 72 chars)."
+fi
 
 if [[ "$MODEL_API" == "gemini" ]]; then
     if [[ -z "$GEMINI_API_KEY" ]]; then
@@ -84,13 +117,19 @@ elif [[ "$MODEL_API" == "groq" ]]; then
         exit 1
     fi
 
+    if [[ "$CONVENTIONAL" -eq 1 ]]; then
+        SYSTEM_PROMPT="Write short, clear git commit messages in Conventional Commits format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build. Max 72 chars."
+    else
+        SYSTEM_PROMPT="Write short, clear git commit messages in imperative mood, max 72 characters."
+    fi
+
     RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
         -H "Authorization: Bearer $GROQ_API_KEY" \
         -H "Content-Type: application/json" \
         -d "{
             \"model\": \"$GROQ_MODEL\",
             \"messages\": [
-                {\"role\": \"system\", \"content\": \"Write short, clear git commit messages in imperative mood, max 72 characters.\"},
+                {\"role\": \"system\", \"content\": \"$SYSTEM_PROMPT\"},
                 {\"role\": \"user\", \"content\": \"$PROMPT\"}
             ]
         }")

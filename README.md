@@ -33,6 +33,9 @@ git add .
 
 # Run the script
 think-commit-msg
+
+# Use Conventional Commits format
+think-commit-msg --conventional
 ```
 
 The script outputs the suggested commit message - copy it or run:
