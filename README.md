@@ -2,28 +2,19 @@
 
 AI-powered git commit message generator using Groq. Generates Conventional Commits format messages from your staged changes.
 
-## Quick Start
+## Quick Install (One-liner)
 
 ```bash
-# 1. Clone
-git clone https://github.com/dalpat/git-tools.git
-cd git-tools
-
-# 2. Get free API key
-# Visit https://console.groq.com and create a key
-
-# 3. Set API key (add to ~/.bashrc or ~/.zshrc to persist)
-export GROQ_API_KEY="your-key-here"
-
-# 4. Make executable
-chmod +x think-commit-msg
-
-# 5. Use it
-git add .
-think-commit-msg
+curl -sL https://raw.githubusercontent.com/dalpat/git-tools/main/install.sh | bash
 ```
 
-## Installation
+This will:
+1. Download the script to `~/.local/bin/`
+2. Ask for your Groq API key (or skip to set manually)
+3. Add it to your PATH
+4. Print usage instructions
+
+## Manual Install
 
 ### Local (in project)
 
