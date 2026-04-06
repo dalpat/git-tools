@@ -31,11 +31,11 @@ Then run: `source ~/.bashrc` or `source ~/.zshrc`
 # Stage your changes
 git add .
 
-# Run the script
+# Run the script (Conventional Commits format by default)
 think-commit-msg
 
-# Use Conventional Commits format
-think-commit-msg --conventional
+# Use simple format instead
+think-commit-msg --simple
 ```
 
 The script outputs the suggested commit message - copy it or run:
