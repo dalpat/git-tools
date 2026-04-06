@@ -37,15 +37,13 @@ think-commit-msg
 # Use simple format instead
 think-commit-msg --simple
 
-# Raw output (for scripting)
-think-commit-msg --raw
+# Show staged files before commit message
+think-commit-msg --verbose
 ```
 
-The script outputs the suggested commit message - copy it or run:
+The script outputs only the commit message (safe for scripting):
 ```bash
 git add . && git commit -m "$(think-commit-msg)"
-# Or with raw output for safer scripting
-git add . && git commit -m "$(think-commit-msg --raw)"
 ```
 
 ## Global Installation (optional)
@@ -76,5 +74,7 @@ Optional environment variables:
 ## Features
 
 - Supports both Gemini and Groq providers
+- Conventional Commits format by default
 - Validates API keys before making requests
 - Handles API errors gracefully
+- Clean output for safe scripting

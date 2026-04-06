@@ -16,7 +16,7 @@ Default format: Conventional Commits (https://www.conventionalcommits.org)
 
 Options:
   -s, --simple          Use simple commit message format (not conventional)
-  -r, --raw             Output only the commit message (for scripting)
+  -v, --verbose         Show staged files before commit message
   -h, --help            Show this help
 
 Requirements:
@@ -34,7 +34,7 @@ EOF
 }
 
 SIMPLE=0
-RAW=0
+VERBOSE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -42,8 +42,8 @@ while [[ $# -gt 0 ]]; do
             SIMPLE=1
             shift
             ;;
-        -r|--raw)
-            RAW=1
+        -v|--verbose)
+            VERBOSE=1
             shift
             ;;
         -h|--help)
@@ -58,21 +58,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$GEMINI_API_KEY" ]] && [[ -z "$GROQ_API_KEY" ]]; then
-    echo "Error: Set GEMINI_API_KEY or GROQ_API_KEY env var"
+    echo "Error: Set GEMINI_API_KEY or GROQ_API_KEY env var" >&2
     exit 1
 fi
 
 STAGED_FILES=$(git diff --cached --name-only)
 
 if [[ -z "$STAGED_FILES" ]]; then
-    echo "Error: No staged changes. Run 'git add' first."
+    echo "Error: No staged changes. Run 'git add' first." >&2
     exit 1
 fi
 
-echo "Staged Files:"
-echo "-------------"
-echo "$STAGED_FILES"
-echo ""
+if [[ "$VERBOSE" -eq 1 ]]; then
+    echo "Staged Files:"
+    echo "-------------"
+    echo "$STAGED_FILES"
+    echo ""
+fi
 
 GIT_DIFF=$(git diff --cached)
 
@@ -102,7 +104,7 @@ fi
 
 if [[ "$MODEL_API" == "gemini" ]]; then
     if [[ -z "$GEMINI_API_KEY" ]]; then
-        echo "Error: GEMINI_API_KEY not set"
+        echo "Error: GEMINI_API_KEY not set" >&2
         exit 1
     fi
 
@@ -114,8 +116,8 @@ if [[ "$MODEL_API" == "gemini" ]]; then
         -d "$JSONPayload")
 
     if ! echo "$RESPONSE" | jq -e '.candidates[0].content.parts[0].text' >/dev/null 2>&1; then
-        echo "Error: API call failed"
-        echo "$RESPONSE"
+        echo "Error: API call failed" >&2
+        echo "$RESPONSE" >&2
         exit 1
     fi
 
@@ -123,7 +125,7 @@ if [[ "$MODEL_API" == "gemini" ]]; then
 
 elif [[ "$MODEL_API" == "groq" ]]; then
     if [[ -z "$GROQ_API_KEY" ]]; then
-        echo "Error: GROQ_API_KEY not set"
+        echo "Error: GROQ_API_KEY not set" >&2
         exit 1
     fi
 
@@ -145,23 +147,15 @@ elif [[ "$MODEL_API" == "groq" ]]; then
         -d "$JSONPayload")
 
     if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
-        echo "Error: API call failed"
-        echo "$RESPONSE"
+        echo "Error: API call failed" >&2
+        echo "$RESPONSE" >&2
         exit 1
     fi
 
     COMMIT_MSG=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 else
-    echo "Error: MODEL_API must be 'gemini' or 'groq'"
+    echo "Error: MODEL_API must be 'gemini' or 'groq'" >&2
     exit 1
 fi
 
-if [[ "$RAW" -eq 1 ]]; then
-    printf '%s' "$COMMIT_MSG"
-else
-    echo ""
-    echo "Suggested Commit Message:"
-    echo "-------------------------"
-    echo "$COMMIT_MSG"
-    echo ""
-fi
+printf '%s' "$COMMIT_MSG"
