@@ -77,7 +77,9 @@ $STAGED_FILES
 Staged changes:
 $GIT_DIFF
 
-Suggest a short, clear Git commit message (imperative mood, max 72 chars)."
+Generate ONLY the commit message. Nothing else. No explanation, no code blocks, no prefixes.
+Format: short description in imperative mood (max 72 chars).
+Example: add login endpoint"
 else
     PROMPT="Staged files:
 $STAGED_FILES
@@ -85,12 +87,10 @@ $STAGED_FILES
 Staged changes:
 $GIT_DIFF
 
-Suggest a Git commit message in Conventional Commits format:
-- Format: <type>(<scope>): <description>
-- Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
-- Use imperative mood, max 72 chars for subject
-- If body needed, add blank line after subject
-
+Generate ONLY the commit message. Nothing else. No explanation, no code blocks, no prefixes.
+Format: Conventional Commits <type>(<scope>): <description>
+Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build
+Rules: imperative mood, max 72 chars, no body.
 Example: feat(auth): add login endpoint"
 fi
 
@@ -120,9 +120,9 @@ elif [[ "$MODEL_API" == "groq" ]]; then
     fi
 
     if [[ "$SIMPLE" -eq 1 ]]; then
-        SYSTEM_PROMPT="Write short, clear git commit messages in imperative mood, max 72 characters."
+        SYSTEM_PROMPT="Generate ONLY the commit message. No explanation, no code blocks, no prefixes. Short description in imperative mood, max 72 chars."
     else
-        SYSTEM_PROMPT="Write short, clear git commit messages in Conventional Commits format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore, perf, ci, build. Max 72 chars."
+        SYSTEM_PROMPT="Generate ONLY the commit message in Conventional Commits format. No explanation, no code blocks, no prefixes. Format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore. Max 72 chars."
     fi
 
     RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
