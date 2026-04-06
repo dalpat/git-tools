@@ -5,7 +5,7 @@ set -euo pipefail
 MODEL_API="${MODEL_API:-groq}"
 GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 GROQ_API_KEY="${GROQ_API_KEY:-}"
-GROQ_MODEL="${GROQ_MODEL:-llama-3.1-70b-versatile}"
+GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
 
 usage() {
     cat <<EOF
@@ -27,7 +27,7 @@ Environment:
   MODEL_API        "gemini" or "groq" (default: groq)
   GEMINI_API_KEY   Your Gemini API key
   GROQ_API_KEY     Your Groq API key
-  GROQ_MODEL       Groq model to use (default: llama-3.1-70b-versatile)
+  GROQ_MODEL       Groq model to use (default: llama-3.3-70b-versatile)
 
 EOF
 }
