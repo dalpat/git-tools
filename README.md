@@ -1,8 +1,31 @@
 # Git Commit Message Generator
 
-Generates smart commit messages using AI (Groq).
+AI-powered git commit message generator using Groq. Generates Conventional Commits format messages from your staged changes.
+
+## Quick Start
+
+```bash
+# 1. Clone
+git clone https://github.com/dalpat/git-tools.git
+cd git-tools
+
+# 2. Get free API key
+# Visit https://console.groq.com and create a key
+
+# 3. Set API key (add to ~/.bashrc or ~/.zshrc to persist)
+export GROQ_API_KEY="your-key-here"
+
+# 4. Make executable
+chmod +x think-commit-msg
+
+# 5. Use it
+git add .
+think-commit-msg
+```
 
 ## Installation
+
+### Local (in project)
 
 ```bash
 git clone https://github.com/dalpat/git-tools.git
@@ -10,74 +33,84 @@ cd git-tools
 chmod +x think-commit-msg
 ```
 
-## Setup
-
-Add to your `~/.bashrc` or `~/.zshrc`:
+### Global (anywhere)
 
 ```bash
-export GROQ_API_KEY="your-key"
+sudo cp think-commit-msg /usr/local/bin/
+think-commit-msg  # Run from anywhere
 ```
-
-Then run: `source ~/.bashrc` or `source ~/.zshrc`
-
-Get your free API key at: https://console.groq.com
 
 ## Usage
 
 ```bash
-# Stage your changes
+# Generate commit message (Conventional Commits format)
 git add .
-
-# Run the script (Conventional Commits format by default)
 think-commit-msg
 
-# Use simple format instead
+# Quick commit in one line
+git add . && git commit -m "$(think-commit-msg)"
+
+# Simple format (not Conventional Commits)
 think-commit-msg --simple
 
-# Show staged files before commit message
+# Show staged files before message
 think-commit-msg --verbose
 
-# List available Groq models
+# List available models
 think-commit-msg --list
 
 # Use specific model
 think-commit-msg --model llama-3.1-8b-instant
 ```
 
-The script outputs only the commit message (safe for scripting):
-```bash
-git add . && git commit -m "$(think-commit-msg)"
-```
+## Options
 
-## Global Installation (optional)
-
-```bash
-sudo cp think-commit-msg /usr/local/bin/think-commit-msg
-
-# Then run anywhere
-think-commit-msg
-```
-
-## Requirements
-
-- Git with staged changes
-- `jq`
-- `curl`
-- Groq API key (free at https://console.groq.com)
+| Flag | Description |
+|------|-------------|
+| `-s, --simple` | Simple commit message (not Conventional Commits) |
+| `-v, --verbose` | Show staged files before output |
+| `-l, --list` | List available Groq models |
+| `-m, --model` | Use specific model (default: llama-3.3-70b-versatile) |
+| `-h, --help` | Show help |
 
 ## Configuration
 
-Optional environment variables:
+### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Groq model to use |
+| `GROQ_API_KEY` | (required) | Your Groq API key |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Model to use |
 
-## Features
+### Get API Key
 
-- Conventional Commits format by default
-- Clean output for safe scripting
-- List available models with `--list`
-- Use specific model with `--model`
-- Validates API key before making requests
-- Handles API errors gracefully
+1. Visit https://console.groq.com
+2. Create an account (free)
+3. Create a new API key
+4. Export it: `export GROQ_API_KEY="your-key"`
+
+## Requirements
+
+- Git
+- `jq`
+- `curl`
+- Groq API key (free)
+
+## Examples
+
+```
+$ git add .
+$ think-commit-msg
+feat(auth): add login endpoint
+
+$ git add .
+$ think-commit-msg --simple
+Add login endpoint
+
+$ git add . && git commit -m "$(think-commit-msg)"
+[main abc123] feat(auth): add login endpoint
+```
+
+## License
+
+MIT
