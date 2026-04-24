@@ -9,3 +9,12 @@
   - Supports --help, --list, --model flags
   - Outputs markdown format with file:line references
   - Verified --help works, syntax checks pass
+
+- #4: think-review: Config system - ~/.think-tools.json + .think-reviewrc + CLI overrides - COMPLETED
+  - Added load_project_config() to think-tools-lib.sh
+  - Added ensure_review_cache() to create .cache/think-review/ directory
+  - think-review now reads .think-reviewrc for batch_size, retry, focus settings
+  - Config resolution: CLI flags > .think-reviewrc > ~/.think-tools.json
+  - Added --retry and --batch-size CLI flags
+  - Created .cache/think-review/ directory on first run
+  - Verified --help shows config resolution order

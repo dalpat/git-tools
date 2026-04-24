@@ -8,6 +8,7 @@ LIB_PATH="${SCRIPT_DIR}/think-tools-lib.sh"
 if [[ -f "$LIB_PATH" ]]; then
     source "$LIB_PATH"
     load_config
+    load_project_config
 else
     GROQ_API_KEY="${GROQ_API_KEY:-}"
     GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
@@ -16,6 +17,16 @@ else
         GROQ_API_KEY="${GROQ_API_KEY:-$(jq -r '.api_key // empty' "${HOME}/.think-tools.json" 2>/dev/null || echo "")}"
         GROQ_MODEL="${GROQ_MODEL:-$(jq -r '.model // "llama-3.3-70b-versatile"' "${HOME}/.think-tools.json" 2>/dev/null || echo "llama-3.3-70b-versatile")}"
     fi
+    
+    REVIEW_BATCH_SIZE="${REVIEW_BATCH_SIZE:-3}"
+    REVIEW_RETRY="${REVIEW_RETRY:-2}"
+    FOCUS_SECURITY="${FOCUS_SECURITY:-true}"
+    FOCUS_STYLE="${FOCUS_STYLE:-true}"
+    FOCUS_BEST_PRACTICES="${FOCUS_BEST_PRACTICES:-true}"
+fi
+
+if [[ -f "$LIB_PATH" ]]; then
+    ensure_review_cache >/dev/null
 fi
 
 usage() {
@@ -28,7 +39,14 @@ Reads staged changes by default, falls back to unstaged if none staged.
 Options:
   -l, --list           List available Groq models
   -m, --model MODEL    Use specific model (default: llama-3.3-70b-versatile)
+  -r, --retry N        Number of retries on failure (default: ${REVIEW_RETRY:-2})
+  -b, --batch-size N   Number of files per batch (default: ${REVIEW_BATCH_SIZE:-3})
   -h, --help           Show this help
+
+Config resolution order (highest wins):
+  1. CLI flags
+  2. .think-reviewrc (project)
+  3. ~/.think-tools.json (defaults)
 
 Requirements:
   - git changes (staged or unstaged)
@@ -42,6 +60,8 @@ EOF
 }
 
 LIST_MODELS=0
+RETRY_COUNT="${REVIEW_RETRY:-2}"
+BATCH_SIZE="${REVIEW_BATCH_SIZE:-3}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -51,6 +71,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -m|--model)
             GROQ_MODEL="$2"
+            shift 2
+            ;;
+        -r|--retry)
+            RETRY_COUNT="$2"
+            shift 2
+            ;;
+        -b|--batch-size)
+            BATCH_SIZE="$2"
             shift 2
             ;;
         -h|--help)
@@ -121,7 +149,7 @@ Provide feedback in this format:
 If no issues found in a category, state that explicitly."
 
 if [[ -f "$LIB_PATH" ]]; then
-    RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" 2)
+    RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" "$RETRY_COUNT")
 else
     JSONPayload=$(jq -n \
         --arg model "$GROQ_MODEL" \
@@ -129,10 +157,24 @@ else
         --arg user "$USER_PROMPT" \
         '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
     
-    RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
-        -H "Authorization: Bearer $GROQ_API_KEY" \
-        -H "Content-Type: application/json" \
-        -d "$JSONPayload")
+    local attempt=0
+    local response
+    while [[ $attempt -lt "$RETRY_COUNT" ]]; do
+        attempt=$((attempt + 1))
+        response=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+            -H "Authorization: Bearer $GROQ_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$JSONPayload")
+        
+        if echo "$response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+            RESPONSE="$response"
+            break
+        fi
+        
+        if [[ $attempt -lt "$RETRY_COUNT" ]]; then
+            sleep 1
+        fi
+    done
 fi
 
 if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then

@@ -14,6 +14,39 @@ load_config() {
     GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
 }
 
+load_project_config() {
+    local project_config=".think-reviewrc"
+    
+    if [[ -f "$project_config" ]]; then
+        REVIEW_BATCH_SIZE="${REVIEW_BATCH_SIZE:-$(jq -r '.batch_size // 3' "$project_config" 2>/dev/null || echo "3")}"
+        REVIEW_RETRY="${REVIEW_RETRY:-$(jq -r '.retry // 2' "$project_config" 2>/dev/null || echo "2")}"
+        
+        local security=$(jq -r '.focus.security // true' "$project_config" 2>/dev/null || echo "true")
+        local style=$(jq -r '.focus.style // true' "$project_config" 2>/dev/null || echo "true")
+        local best_practices=$(jq -r '.focus.best_practices // true' "$project_config" 2>/dev/null || echo "true")
+        
+        FOCUS_SECURITY="${FOCUS_SECURITY:-${security}}"
+        FOCUS_STYLE="${FOCUS_STYLE:-${style}}"
+        FOCUS_BEST_PRACTICES="${FOCUS_BEST_PRACTICES:-${best_practices}}"
+    fi
+    
+    REVIEW_BATCH_SIZE="${REVIEW_BATCH_SIZE:-3}"
+    REVIEW_RETRY="${REVIEW_RETRY:-2}"
+    FOCUS_SECURITY="${FOCUS_SECURITY:-true}"
+    FOCUS_STYLE="${FOCUS_STYLE:-true}"
+    FOCUS_BEST_PRACTICES="${FOCUS_BEST_PRACTICES:-true}"
+}
+
+ensure_review_cache() {
+    local cache_dir=".cache/think-review"
+    
+    if [[ ! -d "$cache_dir" ]]; then
+        mkdir -p "$cache_dir"
+    fi
+    
+    echo "$cache_dir"
+}
+
 call_groq() {
     local model="$1"
     local system_prompt="$2"
