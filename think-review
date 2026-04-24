@@ -1,0 +1,146 @@
+#!/bin/bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_PATH="${SCRIPT_DIR}/think-tools-lib.sh"
+
+if [[ -f "$LIB_PATH" ]]; then
+    source "$LIB_PATH"
+    load_config
+else
+    GROQ_API_KEY="${GROQ_API_KEY:-}"
+    GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
+    
+    if [[ -f "${HOME}/.think-tools.json" ]]; then
+        GROQ_API_KEY="${GROQ_API_KEY:-$(jq -r '.api_key // empty' "${HOME}/.think-tools.json" 2>/dev/null || echo "")}"
+        GROQ_MODEL="${GROQ_MODEL:-$(jq -r '.model // "llama-3.3-70b-versatile"' "${HOME}/.think-tools.json" 2>/dev/null || echo "llama-3.3-70b-versatile")}"
+    fi
+fi
+
+usage() {
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Review staged changes using AI-powered code review.
+Reads staged changes by default, falls back to unstaged if none staged.
+
+Options:
+  -l, --list           List available Groq models
+  -m, --model MODEL    Use specific model (default: llama-3.3-70b-versatile)
+  -h, --help           Show this help
+
+Requirements:
+  - git changes (staged or unstaged)
+  - jq, curl
+  - GROQ_API_KEY env var or ~/.think-tools.json
+
+Output:
+  Markdown format with file:line references
+
+EOF
+}
+
+LIST_MODELS=0
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -l|--list)
+            LIST_MODELS=1
+            shift
+            ;;
+        -m|--model)
+            GROQ_MODEL="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+if [[ -z "$GROQ_API_KEY" ]]; then
+    echo "Error: Set GROQ_API_KEY env var or create ~/.think-tools.json" >&2
+    exit 1
+fi
+
+if [[ "$LIST_MODELS" -eq 1 ]]; then
+    RESPONSE=$(curl -s "https://api.groq.com/openai/v1/models" \
+        -H "Authorization: Bearer $GROQ_API_KEY")
+    
+    if ! echo "$RESPONSE" | jq -e '.data' >/dev/null 2>&1; then
+        echo "Error: Failed to fetch models" >&2
+        echo "$RESPONSE" >&2
+        exit 1
+    fi
+    
+    echo "$RESPONSE" | jq -r '.data[] | "\(.id)"' | sort
+    exit 0
+fi
+
+STAGED_DIFF=$(git diff --cached)
+STAGED_FILES=$(git diff --cached --name-only)
+
+if [[ -n "$STAGED_FILES" ]]; then
+    DIFF="$STAGED_DIFF"
+    DIFF_TYPE="staged"
+else
+    DIFF=$(git diff)
+    DIFF_FILES=$(git diff --name-only)
+    
+    if [[ -z "$DIFF_FILES" ]]; then
+        echo "Error: No staged or unstaged changes to review" >&2
+        exit 1
+    fi
+    
+    DIFF="$DIFF"
+    DIFF_TYPE="unstaged"
+fi
+
+SYSTEM_PROMPT="You are a senior code reviewer. Review the following git diff and provide feedback on security vulnerabilities, code style, and best practices. Output in markdown format with inline file:line references. Group feedback by category (Security, Style, Best Practices). Keep feedback concise and actionable."
+
+USER_PROMPT="Review the following diff for a $DIFF_TYPE changes:
+
+$DIFF
+
+Provide feedback in this format:
+## Security
+- \`filename:line\` - Issue description
+
+## Style
+- \`filename:line\` - Issue description
+
+## Best Practices
+- \`filename:line\` - Issue description
+
+If no issues found in a category, state that explicitly."
+
+if [[ -f "$LIB_PATH" ]]; then
+    RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" 2)
+else
+    JSONPayload=$(jq -n \
+        --arg model "$GROQ_MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$USER_PROMPT" \
+        '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+    
+    RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+        -H "Authorization: Bearer $GROQ_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$JSONPayload")
+fi
+
+if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+    echo "Error: API call failed" >&2
+    echo "$RESPONSE" >&2
+    exit 1
+fi
+
+REVIEW_OUTPUT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+
+printf '%s' "$REVIEW_OUTPUT"

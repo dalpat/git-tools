@@ -2,3 +2,10 @@
   - Created think-tools-lib.sh with load_config, call_groq, stream_response, retry_on_failure functions
   - Refactored think-commit-msg to source the library with fallback for backwards compatibility
   - Verified --help works, syntax checks pass
+
+- #3: think-review: Core tool - diff reading, API call, markdown output - COMPLETED
+  - Created think-review script with core functionality
+  - Reads git diffs (staged changes, falls back to unstaged if none staged)
+  - Supports --help, --list, --model flags
+  - Outputs markdown format with file:line references
+  - Verified --help works, syntax checks pass
