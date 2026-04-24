@@ -1,0 +1,4 @@
+- #2: Extract shared think-tools-lib.sh library - COMPLETED
+  - Created think-tools-lib.sh with load_config, call_groq, stream_response, retry_on_failure functions
+  - Refactored think-commit-msg to source the library with fallback for backwards compatibility
+  - Verified --help works, syntax checks pass

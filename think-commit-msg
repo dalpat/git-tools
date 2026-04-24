@@ -2,8 +2,21 @@
 
 set -euo pipefail
 
-GROQ_API_KEY="${GROQ_API_KEY:-}"
-GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_PATH="${SCRIPT_DIR}/think-tools-lib.sh"
+
+if [[ -f "$LIB_PATH" ]]; then
+    source "$LIB_PATH"
+    load_config
+else
+    GROQ_API_KEY="${GROQ_API_KEY:-}"
+    GROQ_MODEL="${GROQ_MODEL:-llama-3.3-70b-versatile}"
+    
+    if [[ -f "${HOME}/.think-tools.json" ]]; then
+        GROQ_API_KEY="${GROQ_API_KEY:-$(jq -r '.api_key // empty' "${HOME}/.think-tools.json" 2>/dev/null || echo "")}"
+        GROQ_MODEL="${GROQ_MODEL:-$(jq -r '.model // "llama-3.3-70b-versatile"' "${HOME}/.think-tools.json" 2>/dev/null || echo "llama-3.3-70b-versatile")}"
+    fi
+fi
 
 usage() {
     cat <<EOF
@@ -22,7 +35,7 @@ Options:
 Requirements:
   - staged git changes (git add)
   - jq, curl
-  - GROQ_API_KEY env var
+  - GROQ_API_KEY env var or ~/.think-tools.json
 
 Environment:
   GROQ_API_KEY   Your Groq API key
@@ -65,7 +78,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$GROQ_API_KEY" ]]; then
-    echo "Error: Set GROQ_API_KEY env var" >&2
+    echo "Error: Set GROQ_API_KEY env var or create ~/.think-tools.json" >&2
     exit 1
 fi
 
@@ -129,16 +142,20 @@ else
     SYSTEM_PROMPT="Generate ONLY the commit message in Conventional Commits format. No explanation, no code blocks, no prefixes. Format: <type>(<scope>): <description. Types: feat, fix, docs, style, refactor, test, chore. Max 72 chars."
 fi
 
-JSONPayload=$(jq -n \
-    --arg model "$GROQ_MODEL" \
-    --arg system "$SYSTEM_PROMPT" \
-    --arg user "$PROMPT" \
-    '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
-
-RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
-    -H "Authorization: Bearer $GROQ_API_KEY" \
-    -H "Content-Type: application/json" \
-    -d "$JSONPayload")
+if [[ -f "$LIB_PATH" ]]; then
+    RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$PROMPT" 2)
+else
+    JSONPayload=$(jq -n \
+        --arg model "$GROQ_MODEL" \
+        --arg system "$SYSTEM_PROMPT" \
+        --arg user "$PROMPT" \
+        '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+    
+    RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+        -H "Authorization: Bearer $GROQ_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d "$JSONPayload")
+fi
 
 if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
     echo "Error: API call failed" >&2
