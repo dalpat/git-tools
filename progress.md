@@ -34,3 +34,12 @@
   - Added --verbose flag to show diff content before review output
   - Updated --help with new flags
   - Syntax checks pass
+
+- #7: Combined install.sh with tool prompts - COMPLETED
+  - Redesigned installer with interactive tool selection prompt
+  - Supports installing think-commit-msg, think-review, or both
+  - Creates ~/.think-tools.json with api_key and model
+  - Creates .think-reviewrc.example template in current directory
+  - Creates .cache/think-review/ directory on first run
+  - Adds .cache/think-review/ to .gitignore if present
+  - Syntax checks pass
