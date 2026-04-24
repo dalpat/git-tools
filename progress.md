@@ -43,3 +43,9 @@
   - Creates .cache/think-review/ directory on first run
   - Adds .cache/think-review/ to .gitignore if present
   - Syntax checks pass
+
+- #8: Update README.md with both tools - COMPLETED
+  - Rewrote README to document both think-commit-msg and think-review
+  - Added installation instructions for combined installer
+  - Documented think-review options, config files, and examples
+  - Included example .think-reviewrc and ~/.think-tools.json configs
