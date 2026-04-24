@@ -11,3 +11,5 @@ You are working on this repo. Your job is to pick exactly ONE open GitHub issue,
 5. Append your progress to the progress.md file, create the file if does not exist.
 6. Make a git commit of that feature. ONLY WORK ON A SINGLE FEATURE. Commit with a message that references the issue: `fixes #N`.
 7. If, while implementing the feature, you notice that all work is complete, output <promise>COMPLETE</promise>.
+8. Always check progress.md for tracking if all the work is implemented or not. if you feel all work is implemented then stop.
+9. Close the Issue when done after leaving a comment there. DO not close the parent issue.

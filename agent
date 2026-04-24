@@ -8,6 +8,8 @@ fi
 
 start=$SECONDS
 
+echo "Lets Go...."
+
 for ((i=1; i<=$1; i++)); do
   echo "=== Cooking Iteration $i ==="
 
@@ -16,6 +18,7 @@ for ((i=1; i<=$1; i++)); do
   echo "$result"
 
   if [[ "$result" == *"<promise>COMPLETE</promise>"* ]]; then
+    echo "Iteration $i Task Completed.\n"
     break
   fi
 done
