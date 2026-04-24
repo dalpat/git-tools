@@ -40,13 +40,19 @@ Options:
   -l, --list           List available Groq models
   -m, --model MODEL    Use specific model (default: llama-3.3-70b-versatile)
   -r, --retry N        Number of retries on failure (default: ${REVIEW_RETRY:-2})
-  -b, --batch-size N   Number of files per batch (default: ${REVIEW_BATCH_SIZE:-3})
+  -b, --batch-size N  Number of files per batch (default: ${REVIEW_BATCH_SIZE:-3})
+  -a, --all            Enable all focus areas (default)
+  -s, --security       Focus on security vulnerabilities only
+  -t, --style          Focus on code style only
+  -p, --best-practices Focus on best practices only
   -h, --help           Show this help
 
 Config resolution order (highest wins):
   1. CLI flags
   2. .think-reviewrc (project)
   3. ~/.think-tools.json (defaults)
+
+Multiple focus flags can be combined (e.g., --security --style).
 
 Requirements:
   - git changes (staged or unstaged)
@@ -62,6 +68,10 @@ EOF
 LIST_MODELS=0
 RETRY_COUNT="${REVIEW_RETRY:-2}"
 BATCH_SIZE="${REVIEW_BATCH_SIZE:-3}"
+FOCUS_ALL=0
+FOCUS_SECURITY_CLI="${FOCUS_SECURITY:-true}"
+FOCUS_STYLE_CLI="${FOCUS_STYLE:-true}"
+FOCUS_BEST_PRACTICES_CLI="${FOCUS_BEST_PRACTICES:-true}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -80,6 +90,28 @@ while [[ $# -gt 0 ]]; do
         -b|--batch-size)
             BATCH_SIZE="$2"
             shift 2
+            ;;
+        -a|--all)
+            FOCUS_ALL=1
+            FOCUS_SECURITY_CLI="true"
+            FOCUS_STYLE_CLI="true"
+            FOCUS_BEST_PRACTICES_CLI="true"
+            shift
+            ;;
+        -s|--security)
+            FOCUS_ALL=0
+            FOCUS_SECURITY_CLI="true"
+            shift
+            ;;
+        -t|--style)
+            FOCUS_ALL=0
+            FOCUS_STYLE_CLI="true"
+            shift
+            ;;
+        -p|--best-practices)
+            FOCUS_ALL=0
+            FOCUS_BEST_PRACTICES_CLI="true"
+            shift
             ;;
         -h|--help)
             usage
@@ -117,6 +149,7 @@ STAGED_FILES=$(git diff --cached --name-only)
 if [[ -n "$STAGED_FILES" ]]; then
     DIFF="$STAGED_DIFF"
     DIFF_TYPE="staged"
+    ALL_FILES=("$STAGED_FILES")
 else
     DIFF=$(git diff)
     DIFF_FILES=$(git diff --name-only)
@@ -128,61 +161,141 @@ else
     
     DIFF="$DIFF"
     DIFF_TYPE="unstaged"
+    ALL_FILES=("$DIFF_FILES")
 fi
 
-SYSTEM_PROMPT="You are a senior code reviewer. Review the following git diff and provide feedback on security vulnerabilities, code style, and best practices. Output in markdown format with inline file:line references. Group feedback by category (Security, Style, Best Practices). Keep feedback concise and actionable."
+readarray -t FILE_LIST < <(printf '%s\n' "${ALL_FILES[@]}")
+FILE_COUNT="${#FILE_LIST[@]}"
 
-USER_PROMPT="Review the following diff for a $DIFF_TYPE changes:
+process_batch() {
+    local batch_files=("$@")
+    local batch_diff=""
+    
+    for file in "${batch_files[@]}"; do
+        if [[ "$DIFF_TYPE" == "staged" ]]; then
+            batch_diff+=$(git diff --cached -- "$file")
+        else
+            batch_diff+=$(git diff -- "$file")
+        fi
+        batch_diff+=$'\n'
+    done
+    
+    local batch_system_prompt="You are a senior code reviewer. Review the following git diff and provide feedback on: ${FOCUS_AREAS}. Output in markdown format with inline file:line references. Group feedback by enabled category. Keep feedback concise and actionable."
+    
+    local batch_user_prompt="Review the following diff for $DIFF_TYPE changes:
+
+$batch_diff
+
+Provide feedback in this format for each enabled category:
+## [Category Name]
+- \`filename:line\` - Issue description
+
+If no issues found in a category, omit that section."
+    
+    if [[ -f "$LIB_PATH" ]]; then
+        call_groq "$GROQ_MODEL" "$batch_system_prompt" "$batch_user_prompt" "$RETRY_COUNT"
+    else
+        local batch_payload
+        batch_payload=$(jq -n \
+            --arg model "$GROQ_MODEL" \
+            --arg system "$batch_system_prompt" \
+            --arg user "$batch_user_prompt" \
+            '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+        
+        local attempt=0
+        local response
+        while [[ $attempt -lt "$RETRY_COUNT" ]]; do
+            attempt=$((attempt + 1))
+            response=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+                -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d "$batch_payload")
+            
+            if echo "$response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+                echo "$response"
+                return 0
+            fi
+            
+            if [[ $attempt -lt "$RETRY_COUNT" ]]; then
+                sleep 1
+            fi
+        done
+        
+        echo "$response" >&2
+        return 1
+    fi
+}
+
+REVIEW_OUTPUT=""
+
+if [[ "$FILE_COUNT" -gt "$BATCH_SIZE" ]] && [[ "$BATCH_SIZE" -gt 0 ]]; then
+    local batch_num=0
+    for ((i=0; i<FILE_COUNT; i+=BATCH_SIZE)); do
+        batch_num=$((batch_num + 1))
+        local batch=("${FILE_LIST[@]:$i:$BATCH_SIZE}")
+        
+        if [[ "$batch_num" -gt 1 ]]; then
+            REVIEW_OUTPUT+=$'\n---\n'$'\n'
+        fi
+        
+        local batch_response
+        batch_response=$(process_batch "${batch[@]}")
+        
+        if echo "$batch_response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+            REVIEW_OUTPUT+=$(echo "$batch_response" | jq -r '.choices[0].message.content')
+        else
+            REVIEW_OUTPUT+="Batch $batch_num error: $(echo "$batch_response" | jq -r '.error.message // "API failure"')"
+        fi
+    done
+else
+    SYSTEM_PROMPT="You are a senior code reviewer. Review the following git diff and provide feedback on: ${FOCUS_AREAS}. Output in markdown format with inline file:line references. Group feedback by enabled category. Keep feedback concise and actionable."
+    
+    USER_PROMPT="Review the following diff for $DIFF_TYPE changes:
 
 $DIFF
 
-Provide feedback in this format:
-## Security
+Provide feedback in this format for each enabled category:
+## [Category Name]
 - \`filename:line\` - Issue description
 
-## Style
-- \`filename:line\` - Issue description
-
-## Best Practices
-- \`filename:line\` - Issue description
-
-If no issues found in a category, state that explicitly."
-
-if [[ -f "$LIB_PATH" ]]; then
-    RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" "$RETRY_COUNT")
-else
-    JSONPayload=$(jq -n \
-        --arg model "$GROQ_MODEL" \
-        --arg system "$SYSTEM_PROMPT" \
-        --arg user "$USER_PROMPT" \
-        '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+If no issues found in a category, omit that section."
     
-    local attempt=0
-    local response
-    while [[ $attempt -lt "$RETRY_COUNT" ]]; do
-        attempt=$((attempt + 1))
-        response=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
-            -H "Authorization: Bearer $GROQ_API_KEY" \
-            -H "Content-Type: application/json" \
-            -d "$JSONPayload")
+    if [[ -f "$LIB_PATH" ]]; then
+        RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" "$RETRY_COUNT")
+    else
+        JSONPayload=$(jq -n \
+            --arg model "$GROQ_MODEL" \
+            --arg system "$SYSTEM_PROMPT" \
+            --arg user "$USER_PROMPT" \
+            '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
         
-        if echo "$response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
-            RESPONSE="$response"
-            break
-        fi
-        
-        if [[ $attempt -lt "$RETRY_COUNT" ]]; then
-            sleep 1
-        fi
-    done
+        local attempt=0
+        local response
+        while [[ $attempt -lt "$RETRY_COUNT" ]]; do
+            attempt=$((attempt + 1))
+            response=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+                -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d "$JSONPayload")
+            
+            if echo "$response" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+                RESPONSE="$response"
+                break
+            fi
+            
+            if [[ $attempt -lt "$RETRY_COUNT" ]]; then
+                sleep 1
+            fi
+        done
+    fi
+    
+    if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
+        echo "Error: API call failed" >&2
+        echo "$RESPONSE" >&2
+        exit 1
+    fi
+    
+    REVIEW_OUTPUT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 fi
-
-if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
-    echo "Error: API call failed" >&2
-    echo "$RESPONSE" >&2
-    exit 1
-fi
-
-REVIEW_OUTPUT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
 
 printf '%s' "$REVIEW_OUTPUT"

@@ -18,3 +18,11 @@
   - Added --retry and --batch-size CLI flags
   - Created .cache/think-review/ directory on first run
   - Verified --help shows config resolution order
+
+- #5: think-review: Focus area flags + batch processing - COMPLETED
+  - Added --all, --security, --style, --best-practices CLI flags
+  - Multiple focus flags can be combined (e.g., --security --style)
+  - Added per-file batched review with configurable --batch-size
+  - Files reviewed in batches when count exceeds batch-size
+  - Batch processing uses separate diffs per batch for accurate file:line refs
+  - Verified --help shows all focus flags

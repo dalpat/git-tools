@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -e
+
+if [ -z "$1" ]; then
+  echo "Usage: $0 <iterations>"
+  exit 1
+fi
+
+start=$SECONDS
+
+for ((i=1; i<=$1; i++)); do
+  echo "=== Cooking Iteration $i ==="
+
+  result=$(cat prompt.md | opencode run -f progress.md --dangerously-skip-permissions)
+
+  echo "$result"
+
+  if [[ "$result" == *"<promise>COMPLETE</promise>"* ]]; then
+    break
+  fi
+done
+
+duration=$((SECONDS - start))
+mins=$((duration / 60))
+secs=$((duration % 60))
+
+echo ""
+echo "========================================"
+echo "Done. Tasks finished in ${mins}m ${secs}s."
+echo "========================================"
