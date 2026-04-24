@@ -70,9 +70,9 @@ LIST_MODELS=0
 RETRY_COUNT="${REVIEW_RETRY:-2}"
 BATCH_SIZE="${REVIEW_BATCH_SIZE:-3}"
 FOCUS_ALL=0
-FOCUS_SECURITY_CLI="${FOCUS_SECURITY:-true}"
-FOCUS_STYLE_CLI="${FOCUS_STYLE:-true}"
-FOCUS_BEST_PRACTICES_CLI="${FOCUS_BEST_PRACTICES:-true}"
+FOCUS_SECURITY_CLI="false"
+FOCUS_STYLE_CLI="false"
+FOCUS_BEST_PRACTICES_CLI="false"
 VERBOSE=0
 INTERACTIVE=0
 
@@ -130,6 +130,25 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+FOCUS_AREAS=""
+if [[ "$FOCUS_ALL" -eq 1 ]] || { [[ "$FOCUS_SECURITY_CLI" == "true" ]] && [[ "$FOCUS_STYLE_CLI" == "true" ]] && [[ "$FOCUS_BEST_PRACTICES_CLI" == "true" ]]; }; then
+    FOCUS_AREAS="security, style, and best practices"
+elif [[ "$FOCUS_SECURITY_CLI" == "true" ]] && [[ "$FOCUS_STYLE_CLI" == "true" ]]; then
+    FOCUS_AREAS="security and style"
+elif [[ "$FOCUS_SECURITY_CLI" == "true" ]] && [[ "$FOCUS_BEST_PRACTICES_CLI" == "true" ]]; then
+    FOCUS_AREAS="security and best practices"
+elif [[ "$FOCUS_STYLE_CLI" == "true" ]] && [[ "$FOCUS_BEST_PRACTICES_CLI" == "true" ]]; then
+    FOCUS_AREAS="style and best practices"
+elif [[ "$FOCUS_SECURITY_CLI" == "true" ]]; then
+    FOCUS_AREAS="security"
+elif [[ "$FOCUS_STYLE_CLI" == "true" ]]; then
+    FOCUS_AREAS="style"
+elif [[ "$FOCUS_BEST_PRACTICES_CLI" == "true" ]]; then
+    FOCUS_AREAS="best practices"
+else
+    FOCUS_AREAS="security, style, and best practices"
+fi
 
 if [[ -z "$GROQ_API_KEY" ]]; then
     echo "Error: Set GROQ_API_KEY env var or create ~/.think-tools.json" >&2
