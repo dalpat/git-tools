@@ -26,3 +26,11 @@
   - Files reviewed in batches when count exceeds batch-size
   - Batch processing uses separate diffs per batch for accurate file:line refs
   - Verified --help shows all focus flags
+
+- #6: think-review: Retry logic + verbose flag - COMPLETED
+  - Added --retry N flag (default 2) for retrying failed API calls
+  - After max retries, prompts user "Retry again? [y/n]" 
+  - Implemented in both think-review and think-tools-lib.sh call_groq
+  - Added --verbose flag to show diff content before review output
+  - Updated --help with new flags
+  - Syntax checks pass

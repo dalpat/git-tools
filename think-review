@@ -45,6 +45,7 @@ Options:
   -s, --security       Focus on security vulnerabilities only
   -t, --style          Focus on code style only
   -p, --best-practices Focus on best practices only
+  -v, --verbose        Show diff being reviewed before output
   -h, --help           Show this help
 
 Config resolution order (highest wins):
@@ -72,6 +73,8 @@ FOCUS_ALL=0
 FOCUS_SECURITY_CLI="${FOCUS_SECURITY:-true}"
 FOCUS_STYLE_CLI="${FOCUS_STYLE:-true}"
 FOCUS_BEST_PRACTICES_CLI="${FOCUS_BEST_PRACTICES:-true}"
+VERBOSE=0
+INTERACTIVE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -111,6 +114,10 @@ while [[ $# -gt 0 ]]; do
         -p|--best-practices)
             FOCUS_ALL=0
             FOCUS_BEST_PRACTICES_CLI="true"
+            shift
+            ;;
+        -v|--verbose)
+            VERBOSE=1
             shift
             ;;
         -h|--help)
@@ -193,7 +200,7 @@ Provide feedback in this format for each enabled category:
 If no issues found in a category, omit that section."
     
     if [[ -f "$LIB_PATH" ]]; then
-        call_groq "$GROQ_MODEL" "$batch_system_prompt" "$batch_user_prompt" "$RETRY_COUNT"
+        call_groq "$GROQ_MODEL" "$batch_system_prompt" "$batch_user_prompt" "$RETRY_COUNT" "true"
     else
         local batch_payload
         batch_payload=$(jq -n \
@@ -220,6 +227,13 @@ If no issues found in a category, omit that section."
                 sleep 1
             fi
         done
+        
+        read -p "Retry again? [y/n] " -n 1 -r reply
+        echo
+        if [[ "$reply" =~ ^[Yy]$ ]]; then
+            process_batch "${batch_files[@]}"
+            return $?
+        fi
         
         echo "$response" >&2
         return 1
@@ -261,7 +275,7 @@ Provide feedback in this format for each enabled category:
 If no issues found in a category, omit that section."
     
     if [[ -f "$LIB_PATH" ]]; then
-        RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" "$RETRY_COUNT")
+        RESPONSE=$(call_groq "$GROQ_MODEL" "$SYSTEM_PROMPT" "$USER_PROMPT" "$RETRY_COUNT" "true")
     else
         JSONPayload=$(jq -n \
             --arg model "$GROQ_MODEL" \
@@ -287,6 +301,21 @@ If no issues found in a category, omit that section."
                 sleep 1
             fi
         done
+        
+        read -p "Retry again? [y/n] " -n 1 -r reply
+        echo
+        if [[ "$reply" =~ ^[Yy]$ ]]; then
+            JSONPayload=$(jq -n \
+                --arg model "$GROQ_MODEL" \
+                --arg system "$SYSTEM_PROMPT" \
+                --arg user "$USER_PROMPT" \
+                '{"model": $model, "messages": [{"role": "system", "content": $system}, {"role": "user", "content": $user}]}')
+            
+            RESPONSE=$(curl -s -X POST "https://api.groq.com/openai/v1/chat/completions" \
+                -H "Authorization: Bearer $GROQ_API_KEY" \
+                -H "Content-Type: application/json" \
+                -d "$JSONPayload")
+        fi
     fi
     
     if ! echo "$RESPONSE" | jq -e '.choices[0].message.content' >/dev/null 2>&1; then
@@ -296,6 +325,17 @@ If no issues found in a category, omit that section."
     fi
     
     REVIEW_OUTPUT=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+fi
+
+if [[ "$VERBOSE" -eq 1 ]]; then
+    echo "## Diff being reviewed ($DIFF_TYPE changes):"
+    echo ""
+    echo '```diff'
+    echo "$DIFF"
+    echo '```'
+    echo ""
+    echo "---"
+    echo ""
 fi
 
 printf '%s' "$REVIEW_OUTPUT"

@@ -52,6 +52,7 @@ call_groq() {
     local system_prompt="$2"
     local user_prompt="$3"
     local max_retries="${4:-2}"
+    local interactive="${5:-false}"
     
     local payload
     payload=$(jq -n \
@@ -80,6 +81,16 @@ call_groq() {
             sleep 1
         fi
     done
+    
+    if [[ "$interactive" == "true" ]]; then
+        echo "API call failed after $max_retries retries." >&2
+        read -p "Retry again? [y/n] " -n 1 -r reply
+        echo
+        if [[ "$reply" =~ ^[Yy]$ ]]; then
+            call_groq "$model" "$system_prompt" "$user_prompt" "$max_retries" "true"
+            return $?
+        fi
+    fi
     
     echo "$response" >&2
     return 1
