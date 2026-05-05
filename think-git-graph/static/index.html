@@ -6,9 +6,9 @@
 <title>think-git-graph</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  #graph-container { position: relative; overflow-y: auto; overflow-x: hidden; max-height: calc(100vh - 200px); }
+  #graph-container { position: relative; overflow-y: auto; max-height: calc(100vh - 200px); }
   #graph-canvas { display: block; cursor: pointer; }
-  #commit-labels { position: absolute; top: 0; left: 0; pointer-events: none; }
+  #commit-labels { position: absolute; top: 0; pointer-events: none; }
   .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; }
   .commit-label:hover { background-color: rgba(55, 65, 81, 0.5); }
   .commit-label:hover .commit-msg { color: #fbbf24; }
@@ -203,11 +203,15 @@ function renderGraph(commits, branches, append) {
   const maxGraphWidth = containerWidth - labelWidth - 20;
   const actualLaneWidth = Math.min(LANE_WIDTH, Math.max(12, (maxGraphWidth - GRAPH_LEFT - 8) / Math.max(laneCount, 1)));
   const graphAreaWidth = GRAPH_LEFT + (laneCount * actualLaneWidth) + 8;
-  const canvasWidth = Math.min(containerWidth, graphAreaWidth + LABEL_OFFSET + labelWidth);
+  const totalWidth = graphAreaWidth + labelWidth;
 
-  canvas.width = canvasWidth;
+  container.style.minWidth = totalWidth + 'px';
+
+  canvas.width = graphAreaWidth;
   canvas.height = allCommits.length * ROW_HEIGHT;
   canvasHeight = canvas.height;
+  canvas.style.width = graphAreaWidth + 'px';
+  canvas.style.height = canvasHeight + 'px';
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -292,20 +296,19 @@ function renderGraph(commits, branches, append) {
   }
 
   labelsContainer.innerHTML = '';
-  labelsContainer.style.width = canvasWidth + 'px';
+  labelsContainer.style.width = labelWidth + 'px';
   labelsContainer.style.height = canvasHeight + 'px';
-
-  const labelLeft = GRAPH_LEFT + (laneCount * actualLaneWidth) + LABEL_OFFSET;
+  labelsContainer.style.left = graphAreaWidth + 'px';
 
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
     const pos = commitPositions[i];
     const label = document.createElement('div');
     label.className = 'commit-label flex items-center gap-2 px-1.5 py-0.5 rounded transition-colors';
-    label.style.left = labelLeft + 'px';
+    label.style.left = '0px';
     label.style.top = (i * ROW_HEIGHT + 1) + 'px';
     label.style.height = (ROW_HEIGHT - 2) + 'px';
-    label.style.maxWidth = (canvasWidth - labelLeft - 8) + 'px';
+    label.style.maxWidth = (labelWidth - 8) + 'px';
     label.dataset.hash = c.hash;
 
     let branchPill = '';
