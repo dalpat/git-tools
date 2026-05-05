@@ -97,9 +97,9 @@ function getBranchColor(branch) {
 }
 
 function assignLanes(commits, branches, existingLaneMap, append) {
-  const laneMap = append ? { ...existingLaneMap } : {};
+  const laneMap = {};
   const laneColorMap = {};
-  let nextLane = append ? Math.max(0, ...Object.values(existingLaneMap)) + 1 : 0;
+  let nextLane = 0;
 
   if (branches) {
     branches.forEach(b => {
@@ -111,39 +111,34 @@ function assignLanes(commits, branches, existingLaneMap, append) {
 
   const commitLane = [];
   const usedLanes = new Set();
-  const laneEndRow = {};
 
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i];
-    let lane = laneMap[c.hash];
 
-    if (lane === undefined) {
-      const firstParent = c.parents && c.parents.length > 0 ? c.parents[0] : null;
-      const parentLane = firstParent ? laneMap[firstParent] : undefined;
+    const firstParent = c.parents && c.parents.length > 0 ? c.parents[0] : null;
+    const parentLane = firstParent ? laneMap[firstParent] : undefined;
 
-      if (parentLane !== undefined && !usedLanes.has(parentLane)) {
-        lane = parentLane;
-      } else {
-        lane = -1;
-        const sortedUsed = [...usedLanes].sort((a, b) => a - b);
-        for (let l = 0; l <= sortedUsed.length; l++) {
-          if (!usedLanes.has(l)) {
-            lane = l;
-            break;
-          }
+    let lane;
+    if (parentLane !== undefined && !usedLanes.has(parentLane)) {
+      lane = parentLane;
+    } else {
+      lane = -1;
+      const sortedUsed = [...usedLanes].sort((a, b) => a - b);
+      for (let l = 0; l <= sortedUsed.length; l++) {
+        if (!usedLanes.has(l)) {
+          lane = l;
+          break;
         }
-        if (lane === -1) {
-          lane = nextLane++;
-        }
+      }
+      if (lane === -1) {
+        lane = nextLane++;
       }
     }
 
     commitLane[i] = lane;
     usedLanes.add(lane);
-    laneEndRow[lane] = i;
 
     if (c.parents && c.parents.length > 0) {
-      const firstParent = c.parents[0];
       if (laneMap[firstParent] === undefined) {
         laneMap[firstParent] = lane;
       }
