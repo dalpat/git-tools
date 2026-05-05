@@ -206,10 +206,16 @@ func parseCommits(input string) []Commit {
 	return commits
 }
 
+var branchColors = []string{
+	"#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4",
+	"#3b82f6", "#8b5cf6", "#ec4899", "#f43f5e", "#84cc16",
+	"#14b8a6", "#6366f1", "#a855f7", "#d946ef", "#0ea5e9",
+}
+
 func parseBranches(input string) []Branch {
 	var branches []Branch
 	lines := strings.Split(strings.TrimSpace(input), "\n")
-	for _, line := range lines {
+	for i, line := range lines {
 		if line == "" {
 			continue
 		}
@@ -221,9 +227,11 @@ func parseBranches(input string) []Branch {
 		if len(parts) >= 3 {
 			headHash = parts[2]
 		}
+		colorIdx := i % len(branchColors)
 		branches = append(branches, Branch{
 			Name:     parts[0],
 			HeadHash: headHash,
+			Color:    branchColors[colorIdx],
 		})
 	}
 	return branches

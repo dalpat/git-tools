@@ -5,10 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>think-git-graph</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<style>
+  #graph-container { position: relative; overflow: auto; max-height: calc(100vh - 200px); }
+  #graph-canvas { display: block; cursor: pointer; }
+  #commit-labels { position: absolute; top: 0; left: 0; pointer-events: none; }
+  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; }
+  .commit-label:hover .commit-msg { color: #fbbf24; }
+</style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen">
-<div class="max-w-6xl mx-auto px-4 py-8">
-  <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-800">
+<div class="max-w-7xl mx-auto px-4 py-8">
+  <header class="flex items-center justify-between mb-6 pb-4 border-b border-gray-800">
     <div class="flex items-center gap-4">
       <h1 class="text-xl font-semibold tracking-tight">think-git-graph</h1>
       <span id="commit-count" class="text-xs text-gray-500"></span>
@@ -18,9 +25,10 @@
     </div>
   </header>
 
-  <main id="content" class="text-center py-20 text-gray-500">
-    <p>Loading commits...</p>
-  </main>
+  <div id="graph-container" class="rounded-lg border border-gray-800 bg-gray-900/50">
+    <canvas id="graph-canvas"></canvas>
+    <div id="commit-labels"></div>
+  </div>
 
   <div id="load-more-container" class="text-center py-6 hidden">
     <button id="load-more-btn" class="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors">
@@ -44,24 +52,230 @@
 
 <script>
 const PER_PAGE = 200;
+const ROW_HEIGHT = 36;
+const GRAPH_LEFT = 24;
+const LANE_WIDTH = 28;
+const DOT_RADIUS = 5;
+const LABEL_OFFSET = 16;
+
 let currentOffset = 0;
 let totalCommits = 0;
-
-// Deterministic branch colors
-const branchColors = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
-  '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#84cc16',
-  '#14b8a6', '#6366f1', '#a855f7', '#d946ef', '#0ea5e9',
-];
-
+let allCommits = [];
 let branchColorMap = {};
+let commitPositions = [];
+let canvasHeight = 0;
+
+const canvas = document.getElementById('graph-canvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('graph-container');
+const labelsContainer = document.getElementById('commit-labels');
 
 function getBranchColor(branch) {
   if (!branchColorMap[branch]) {
-    const idx = Object.keys(branchColorMap).length % branchColors.length;
-    branchColorMap[branch] = branchColors[idx];
+    const idx = Object.keys(branchColorMap).length % 15;
+    const colors = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
+    branchColorMap[branch] = colors[idx];
   }
   return branchColorMap[branch];
+}
+
+function assignLanes(commits, branches) {
+  branches.forEach(b => { if (!branchColorMap[b.name]) getBranchColor(b.name); });
+
+  const branchLane = {};
+  const commitLane = [];
+  let nextLane = 0;
+  const activeLanes = new Set();
+
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    let lane = -1;
+
+    if (c.branches && c.branches.length > 0) {
+      for (const b of c.branches) {
+        if (branchLane[b] !== undefined) {
+          lane = branchLane[b];
+          break;
+        }
+      }
+      if (lane === -1) {
+        lane = nextLane++;
+        for (const b of c.branches) {
+          branchLane[b] = lane;
+        }
+      }
+    } else if (c.parents && c.parents.length > 0) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (commits[j].hash === c.parents[0]) {
+          lane = commitLane[j];
+          break;
+        }
+      }
+    }
+
+    if (lane === -1) lane = nextLane++;
+
+    commitLane[i] = lane;
+    activeLanes.add(lane);
+  }
+
+  return { commitLane, laneCount: nextLane };
+}
+
+function renderGraph(commits, branches, append) {
+  if (!append) {
+    allCommits = commits;
+    commitPositions = [];
+  } else {
+    allCommits = allCommits.concat(commits);
+  }
+
+  const { commitLane, laneCount } = assignLanes(allCommits, branches || []);
+  const canvasWidth = GRAPH_LEFT + (laneCount * LANE_WIDTH) + 12;
+
+  canvas.width = canvasWidth;
+  canvas.height = allCommits.length * ROW_HEIGHT;
+  canvasHeight = canvas.height;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.strokeStyle = '#374151';
+  ctx.lineWidth = 2;
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const lane = commitLane[i];
+    const x = GRAPH_LEFT + (lane * LANE_WIDTH) + (LANE_WIDTH / 2);
+    const y = (i * ROW_HEIGHT) + (ROW_HEIGHT / 2);
+
+    commitPositions[i] = { x, y, hash: c.hash, shortHash: c.shortHash, lane };
+
+    if (i < allCommits.length - 1) {
+      const nextLane = commitLane[i + 1];
+      const nextX = GRAPH_LEFT + (nextLane * LANE_WIDTH) + (LANE_WIDTH / 2);
+      const nextY = ((i + 1) * ROW_HEIGHT) + (ROW_HEIGHT / 2);
+
+      for (let l = 0; l <= Math.max(lane, nextLane); l++) {
+        const laneX = GRAPH_LEFT + (l * LANE_WIDTH) + (LANE_WIDTH / 2);
+        const isCommitLane = (l === lane || l === nextLane);
+        const isBetween = (l >= Math.min(lane, nextLane) && l <= Math.max(lane, nextLane));
+
+        if (isBetween) {
+          ctx.strokeStyle = isCommitLane ? getBranchColorForLane(l, commitLane, i) : '#374151';
+          ctx.globalAlpha = isCommitLane ? 1.0 : 0.3;
+          ctx.beginPath();
+          ctx.moveTo(laneX, y);
+          ctx.lineTo(laneX, nextY);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+
+    let color = '#6b7280';
+    if (c.branches && c.branches.length > 0) {
+      color = getBranchColor(c.branches[0]);
+    }
+
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#111827';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    if (c.branches && c.branches.length > 1) {
+      for (let b = 1; b < c.branches.length; b++) {
+        const bLane = findLaneForBranch(c.branches[b], commitLane, allCommits, i);
+        if (bLane !== -1 && bLane !== pos.lane) {
+          const bX = GRAPH_LEFT + (bLane * LANE_WIDTH) + (LANE_WIDTH / 2);
+          ctx.beginPath();
+          ctx.arc(bX, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
+          ctx.fillStyle = getBranchColor(c.branches[b]);
+          ctx.globalAlpha = 0.6;
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+        }
+      }
+    }
+
+    if (c.parents && c.parents.length > 1) {
+      for (const parentHash of c.parents) {
+        const parentIdx = allCommits.findIndex(p => p.hash === parentHash);
+        if (parentIdx !== -1 && parentIdx > i) {
+          const parentPos = commitPositions[parentIdx];
+          if (parentPos && parentPos.lane !== pos.lane) {
+            ctx.beginPath();
+            ctx.strokeStyle = getBranchColorForLane(pos.lane, commitLane, i);
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.5;
+            ctx.moveTo(pos.x, pos.y + DOT_RADIUS);
+            const midY = pos.y + (parentPos.y - pos.y) / 2;
+            ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, parentPos.y - DOT_RADIUS);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+          }
+        }
+      }
+    }
+  }
+
+  labelsContainer.innerHTML = '';
+  labelsContainer.style.width = canvasWidth + 'px';
+  labelsContainer.style.height = canvasHeight + 'px';
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+    const labelLeft = GRAPH_LEFT + (commitLane[i] * LANE_WIDTH) + LANE_WIDTH + LABEL_OFFSET;
+
+    const label = document.createElement('div');
+    label.className = 'commit-label flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50 transition-colors';
+    label.style.left = labelLeft + 'px';
+    label.style.top = (i * ROW_HEIGHT) + 'px';
+    label.style.height = ROW_HEIGHT + 'px';
+    label.dataset.hash = c.hash;
+
+    label.innerHTML =
+      '<span class="font-mono text-xs text-amber-600 w-16 flex-shrink-0">' + escapeHtml(c.shortHash) + '</span>' +
+      '<span class="commit-msg text-sm text-gray-300 flex-1 truncate transition-colors">' + escapeHtml(c.message) + '</span>' +
+      '<span class="text-xs text-gray-600 w-20 flex-shrink-0 text-right hidden md:block">' + relativeDate(c.date) + '</span>';
+
+    label.addEventListener('click', () => showCommitDetail(c.hash));
+    labelsContainer.appendChild(label);
+  }
+
+  document.getElementById('load-more-container').classList.toggle('hidden', currentOffset + PER_PAGE >= totalCommits);
+}
+
+function getBranchColorForLane(lane, commitLane, commitIdx) {
+  for (let i = commitIdx; i >= 0; i--) {
+    if (commitLane[i] === lane && allCommits[i].branches && allCommits[i].branches.length > 0) {
+      return getBranchColor(allCommits[i].branches[0]);
+    }
+  }
+  return '#6b7280';
+}
+
+function findLaneForBranch(branch, commitLane, commits, upToIdx) {
+  for (let i = upToIdx; i >= 0; i--) {
+    if (commits[i].branches && commits[i].branches.includes(branch)) {
+      return commitLane[i];
+    }
+  }
+  return -1;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 function relativeDate(dateStr) {
@@ -81,70 +295,22 @@ function relativeDate(dateStr) {
   return Math.floor(diffDay / 365) + 'y ago';
 }
 
-function renderCommits(commits, append) {
-  const container = document.getElementById('content');
-  if (!append) container.innerHTML = '';
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
 
-  if (commits.length === 0 && !append) {
-    container.innerHTML = '<p class="text-center py-20 text-gray-500">No commits yet.</p>';
-    return;
-  }
-
-  const list = document.createElement('div');
-  list.className = 'space-y-0.5';
-
-  commits.forEach(c => {
-    const row = document.createElement('div');
-    row.className = 'flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-900 transition-colors group cursor-pointer';
-    row.dataset.hash = c.hash;
-
-    const hashSpan = document.createElement('span');
-    hashSpan.className = 'font-mono text-xs text-amber-600 w-16 flex-shrink-0';
-    hashSpan.textContent = c.shortHash;
-
-    const msgSpan = document.createElement('span');
-    msgSpan.className = 'text-sm text-gray-200 flex-1 truncate';
-    msgSpan.textContent = c.message;
-
-    const branchBadges = document.createElement('span');
-    branchBadges.className = 'flex items-center gap-1 flex-shrink-0';
-    if (c.branches) {
-      c.branches.forEach(b => {
-        const badge = document.createElement('span');
-        badge.className = 'text-xs px-1.5 py-0.5 rounded font-mono';
-        badge.style.backgroundColor = getBranchColor(b) + '22';
-        badge.style.color = getBranchColor(b);
-        badge.style.border = '1px solid ' + getBranchColor(b) + '44';
-        badge.textContent = b;
-        branchBadges.appendChild(badge);
-      });
+  for (const pos of commitPositions) {
+    const dx = mx - pos.x;
+    const dy = my - pos.y;
+    if (dx * dx + dy * dy <= (DOT_RADIUS + 4) * (DOT_RADIUS + 4)) {
+      showCommitDetail(pos.hash);
+      return;
     }
-
-    const authorSpan = document.createElement('span');
-    authorSpan.className = 'text-xs text-gray-500 w-32 flex-shrink-0 text-right hidden md:block';
-    authorSpan.textContent = c.author;
-
-    const dateSpan = document.createElement('span');
-    dateSpan.className = 'text-xs text-gray-600 w-20 flex-shrink-0 text-right hidden md:block';
-    dateSpan.textContent = relativeDate(c.date);
-
-    row.appendChild(hashSpan);
-    row.appendChild(msgSpan);
-    row.appendChild(branchBadges);
-    row.appendChild(authorSpan);
-    row.appendChild(dateSpan);
-
-    row.addEventListener('click', () => {
-      showCommitDetail(c.hash);
-    });
-
-    list.appendChild(row);
-  });
-
-  container.appendChild(list);
-
-  document.getElementById('load-more-container').classList.toggle('hidden', currentOffset + PER_PAGE >= totalCommits);
-}
+  }
+});
 
 async function loadMore() {
   const btn = document.getElementById('load-more-btn');
@@ -155,7 +321,7 @@ async function loadMore() {
     currentOffset += PER_PAGE;
     const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=' + currentOffset);
     const data = await resp.json();
-    renderCommits(data.commits, true);
+    renderGraph(data.commits, data.branches, true);
   } catch (err) {
     btn.textContent = 'Error';
   } finally {
@@ -170,9 +336,13 @@ async function loadGraph() {
     const data = await resp.json();
     totalCommits = data.total;
     document.getElementById('commit-count').textContent = totalCommits + ' commits';
-    renderCommits(data.commits, false);
+    branchColorMap = {};
+    if (data.branches) {
+      data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
+    }
+    renderGraph(data.commits, data.branches, false);
   } catch (err) {
-    document.getElementById('content').innerHTML =
+    document.getElementById('graph-container').innerHTML =
       '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
   }
 }

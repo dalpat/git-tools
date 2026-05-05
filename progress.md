@@ -57,3 +57,17 @@
   - Handles errors and empty file lists gracefully
 - 2 new tests: success case with files, not-found with 404
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 5: Canvas-rendered git graph with colored branches (#13) - completed
+- Replaced text commit list with HTML Canvas rendering
+- Canvas draws colored vertical lines for each branch lane
+- Commit dots appear at correct positions on branch lines with branch colors
+- Merge commits show bezier curve connections to parent branches
+- Branch color assignment is deterministic (same branch = same color)
+- Colors assigned server-side in `parseBranches()` and sent via `/graph` API
+- `GraphResponse` struct extended with `Branches` field
+- Commit labels rendered as HTML overlay on canvas for click interaction
+- Clicking commit dots or labels opens detail panel
+- Graph is scrollable via container overflow
+- "Load More" button still works to fetch older commits and re-renders full graph
+- All 27 tests pass; binary builds and runs end-to-end

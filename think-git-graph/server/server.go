@@ -19,8 +19,9 @@ type StatusResponse struct {
 }
 
 type GraphResponse struct {
-	Commits []gitdata.Commit `json:"commits"`
-	Total   int              `json:"total"`
+	Commits  []gitdata.Commit `json:"commits"`
+	Branches []gitdata.Branch `json:"branches"`
+	Total    int              `json:"total"`
 }
 
 type CommitDetailResponse struct {
@@ -122,9 +123,15 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	branches, _ := s.gd.GetBranches()
+	if branches == nil {
+		branches = []gitdata.Branch{}
+	}
+
 	resp := GraphResponse{
-		Commits: commits,
-		Total:   total,
+		Commits:  commits,
+		Branches: branches,
+		Total:    total,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
