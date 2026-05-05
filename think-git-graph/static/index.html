@@ -9,29 +9,42 @@
   #graph-container { position: relative; overflow: auto; max-height: calc(100vh - 200px); }
   #graph-canvas { display: block; cursor: pointer; }
   #commit-labels { position: absolute; top: 0; left: 0; pointer-events: none; }
-  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; }
+  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; transition: background-color 0.15s ease; }
+  .commit-label:hover { background-color: rgba(55, 65, 81, 0.5); }
   .commit-label:hover .commit-msg { color: #fbbf24; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .spin { animation: spin 1s linear infinite; }
+  #refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
-<div class="max-w-7xl mx-auto px-4 py-8">
-  <header class="flex items-center justify-between mb-6 pb-4 border-b border-gray-800">
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+<div class="max-w-7xl mx-auto px-6 py-10">
+  <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-800">
     <div class="flex items-center gap-4">
-      <h1 class="text-xl font-semibold tracking-tight">think-git-graph</h1>
-      <span id="commit-count" class="text-xs text-gray-500"></span>
+      <h1 class="text-2xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
+      <span id="commit-count" class="text-xs text-gray-500 font-medium"></span>
     </div>
-    <div id="branch-indicator" class="flex items-center gap-2 text-sm text-gray-400">
-      <span class="animate-pulse">Loading...</span>
+    <div class="flex items-center gap-4">
+      <button id="refresh-btn" class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors duration-150 flex items-center gap-2 border border-gray-700 hover:border-gray-600" title="Refresh">
+        <svg id="refresh-icon" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        <span>Refresh</span>
+      </button>
+      <div id="branch-indicator" class="flex items-center gap-2 text-sm text-gray-400">
+        <span class="animate-pulse">Loading...</span>
+      </div>
     </div>
   </header>
 
-  <div id="graph-container" class="rounded-lg border border-gray-800 bg-gray-900/50">
+  <div id="graph-container" class="rounded-lg border border-gray-800 bg-gray-900/50 shadow-lg">
     <canvas id="graph-canvas"></canvas>
     <div id="commit-labels"></div>
   </div>
 
-  <div id="load-more-container" class="text-center py-6 hidden">
-    <button id="load-more-btn" class="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors">
+  <div id="load-more-container" class="text-center py-8 hidden">
+    <button id="load-more-btn" class="px-5 py-2.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors duration-150 border border-gray-700 hover:border-gray-600">
       Load More
     </button>
   </div>
@@ -39,7 +52,7 @@
 
 <div id="detail-overlay" class="hidden fixed inset-0 z-50 flex justify-end">
   <div id="detail-backdrop" class="absolute inset-0 bg-black/50"></div>
-  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900 border-l border-gray-700 overflow-y-auto shadow-2xl transform transition-transform duration-200">
+  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900 border-l border-gray-700 overflow-y-auto shadow-2xl transform transition-transform duration-200 translate-x-full">
     <div class="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
       <h2 class="text-lg font-semibold text-gray-100">Commit Detail</h2>
       <button id="detail-close" class="text-gray-400 hover:text-gray-200 text-xl leading-none">&times;</button>
@@ -364,6 +377,24 @@ async function loadStatus() {
 }
 
 document.getElementById('load-more-btn').addEventListener('click', loadMore);
+document.getElementById('refresh-btn').addEventListener('click', refresh);
+
+async function refresh() {
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  icon.classList.add('spin');
+
+  try {
+    currentOffset = 0;
+    allCommits = [];
+    branchColorMap = {};
+    await Promise.all([loadGraph(), loadStatus()]);
+  } finally {
+    btn.disabled = false;
+    icon.classList.remove('spin');
+  }
+}
 
 loadStatus();
 loadGraph();
@@ -374,6 +405,7 @@ function showCommitDetail(hash) {
   const panel = document.getElementById('detail-panel');
 
   overlay.classList.remove('hidden');
+  panel.classList.remove('translate-x-full');
   panel.classList.add('translate-x-0');
   content.innerHTML = '<p class="text-gray-500">Loading...</p>';
 
@@ -416,7 +448,14 @@ function showCommitDetail(hash) {
 
 function hideCommitDetail() {
   const overlay = document.getElementById('detail-overlay');
-  overlay.classList.add('hidden');
+  const panel = document.getElementById('detail-panel');
+
+  panel.classList.remove('translate-x-0');
+  panel.classList.add('translate-x-full');
+
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+  }, 200);
 }
 
 document.getElementById('detail-close').addEventListener('click', hideCommitDetail);

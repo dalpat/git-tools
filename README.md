@@ -6,6 +6,7 @@ AI-powered git tools using Groq.
 
 - **think-commit-msg** - Generate Conventional Commits format messages from staged changes
 - **think-review** - Review code changes with AI-powered feedback
+- **think-git-graph** - Visual git history browser GUI with colored branch graph
 
 ## Quick Install (One-liner)
 
@@ -145,6 +146,42 @@ Example `~/.think-tools.json`:
 }
 ```
 
+## think-git-graph
+
+Visual git history browser GUI. Shows colored branch graph, commit details, and current branch.
+
+```bash
+# Open git graph in browser (blocks terminal)
+think-git-graph
+
+# Run in background
+think-git-graph --detach
+
+# Stop detached instance
+kill $(cat /tmp/think-git-graph.pid)
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--detach` | Run server in background with PID file |
+| `-h, --help` | Show help |
+
+### Features
+
+- Colored branch graph rendered on HTML Canvas
+- Click commits to see full message, author, date, and files changed
+- Current branch indicator with clean/dirty status
+- "Load More" button for pagination (loads 200 commits at a time)
+- Refresh button to update after making changes
+- Zero runtime dependencies — single binary
+
+### Requirements
+
+- Git
+- A web browser (Chrome, Firefox, Safari, Edge)
+
 ## Configuration
 
 ### Get API Key
@@ -166,7 +203,8 @@ Example `~/.think-tools.json`:
 - Git
 - `jq`
 - `curl`
-- Groq API key (free)
+- Groq API key (free) — only for think-commit-msg and think-review
+- Go 1.22+ (only if building think-git-graph from source)
 
 ## License
 

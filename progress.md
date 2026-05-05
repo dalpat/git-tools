@@ -71,3 +71,19 @@
 - Graph is scrollable via container overflow
 - "Load More" button still works to fetch older commits and re-renders full graph
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 6: Refresh, --detach, install.sh, README polish (#14) - completed
+- `--detach` flag fully implemented:
+  - Child process runs in background with `setsid`
+  - Parent waits for URL file and prints listening URL
+  - Child suppresses stdout/browser-open when `THINK_GIT_GRAPH_QUIET=1`
+  - PID file written to `/tmp/think-git-graph.pid`
+- `install.sh` updated to build `think-git-graph` from source:
+  - Detects `go` and local `think-git-graph/go.mod`
+  - Builds with `go build` when available; falls back to downloading pre-built binary
+- UI polish in `static/index.html`:
+  - Detail panel now slides in/out with `translate-x-full` → `translate-x-0` transition
+  - Proper 200ms delay before hiding overlay on close
+- Refresh button already functional from earlier slice; verified working end-to-end
+- README already documents `think-git-graph` usage; no changes needed
+- All 27 tests pass; binary builds and runs end-to-end

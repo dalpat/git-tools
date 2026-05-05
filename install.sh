@@ -16,39 +16,48 @@ echo ""
 
 echo "This installer can set up the following tools:"
 echo "  1. think-commit-msg - Generate commit messages"
-echo "  2. think-review   - Review code changes"
-echo "  3. Both tools"
+echo "  2. think-review     - Review code changes"
+echo "  3. think-git-graph  - Visual git history viewer"
+echo "  4. All tools"
 echo ""
 
-read -p "Which tool do you want to install? [1/2/3/both]: " CHOICE
+read -p "Which tool do you want to install? [1/2/3/4/all]: " CHOICE
 
 case "$CHOICE" in
-    1|both)
+    1|all)
         echo "OK, will install think-commit-msg"
         ;;
     2)
         echo "OK, will install think-review"
         ;;
     3)
-        echo "OK, will install both tools"
+        echo "OK, will install think-git-graph"
+        ;;
+    4)
+        echo "OK, will install all tools"
         ;;
     *)
-        echo "Invalid choice. Installing both tools by default."
+        echo "Invalid choice. Installing all tools by default."
         ;;
 esac
 
 INSTALL_COMMIT=false
 INSTALL_REVIEW=false
+INSTALL_GRAPH=false
 
-if [[ "$CHOICE" == "1" ]] || [[ "$CHOICE" == "b" ]]; then
+if [[ "$CHOICE" == "1" ]] || [[ "$CHOICE" == "a" ]]; then
     INSTALL_COMMIT=true
 fi
-if [[ "$CHOICE" == "2" ]] || [[ "$CHOICE" == "b" ]]; then
+if [[ "$CHOICE" == "2" ]] || [[ "$CHOICE" == "a" ]]; then
     INSTALL_REVIEW=true
 fi
-if [[ -z "$CHOICE" ]] || [[ "$CHOICE" == "3" ]]; then
+if [[ "$CHOICE" == "3" ]] || [[ "$CHOICE" == "a" ]]; then
+    INSTALL_GRAPH=true
+fi
+if [[ -z "$CHOICE" ]] || [[ "$CHOICE" == "4" ]]; then
     INSTALL_COMMIT=true
     INSTALL_REVIEW=true
+    INSTALL_GRAPH=true
 fi
 
 echo ""
@@ -139,6 +148,23 @@ if [[ "$INSTALL_REVIEW" == "true" ]]; then
     echo "think-review and think-tools-lib.sh installed"
 fi
 
+if [[ "$INSTALL_GRAPH" == "true" ]]; then
+    echo "Installing think-git-graph..."
+
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if command -v go &> /dev/null && [[ -f "${SCRIPT_DIR}/think-git-graph/go.mod" ]]; then
+        echo "Building from source..."
+        (cd "${SCRIPT_DIR}/think-git-graph" && go build -o "${INSTALL_DIR}/think-git-graph" .)
+        echo "think-git-graph built and installed"
+    else
+        echo "Downloading pre-built binary..."
+        GO_BIN_URL="${REPO_URL}/think-git-graph/think-git-graph"
+        curl -sL "${GO_BIN_URL}" -o "${INSTALL_DIR}/think-git-graph"
+        chmod +x "${INSTALL_DIR}/think-git-graph"
+        echo "think-git-graph installed"
+    fi
+fi
+
 if [[ ":$PATH:" != *":${INSTALL_DIR}:"* ]]; then
     if ! grep -q "export PATH=.*\.local/bin" "$CONFIG_FILE" 2>/dev/null; then
         echo "" >> "$CONFIG_FILE"
@@ -195,6 +221,11 @@ fi
 if [[ "$INSTALL_REVIEW" == "true" ]]; then
     echo "  2. Review changes: think-review"
     echo "     think-review --help"
+fi
+
+if [[ "$INSTALL_GRAPH" == "true" ]]; then
+    echo "  2. Visual git graph: think-git-graph"
+    echo "     think-git-graph --detach"
 fi
 
 echo ""
