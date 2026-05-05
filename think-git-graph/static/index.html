@@ -67,8 +67,8 @@
 const PER_PAGE = 200;
 const ROW_HEIGHT = 28;
 const GRAPH_LEFT = 16;
-const LANE_WIDTH = 32;
-const DOT_RADIUS = 6;
+const LANE_WIDTH = 24;
+const DOT_RADIUS = 5;
 const LABEL_OFFSET = 12;
 
 let currentOffset = 0;
@@ -77,6 +77,7 @@ let allCommits = [];
 let branchColorMap = {};
 let commitPositions = [];
 let commitLaneMap = {};
+let laneColors = [];
 let canvasHeight = 0;
 let currentBranch = '';
 
@@ -85,50 +86,61 @@ const ctx = canvas.getContext('2d');
 const container = document.getElementById('graph-container');
 const labelsContainer = document.getElementById('commit-labels');
 
+const BRANCH_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
+
 function getBranchColor(branch) {
   if (!branchColorMap[branch]) {
-    const idx = Object.keys(branchColorMap).length % 15;
-    const colors = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
-    branchColorMap[branch] = colors[idx];
+    const idx = Object.keys(branchColorMap).length % BRANCH_COLORS.length;
+    branchColorMap[branch] = BRANCH_COLORS[idx];
   }
   return branchColorMap[branch];
 }
 
 function assignLanes(commits, branches, existingLaneMap, append) {
   const laneMap = append ? { ...existingLaneMap } : {};
-  const activeLanes = new Set();
+  const laneCommitMap = {};
+  const laneColorMap = {};
   let nextLane = append ? Math.max(0, ...Object.values(existingLaneMap)) + 1 : 0;
 
-  const branchHeads = {};
   if (branches) {
     branches.forEach(b => {
-      branchHeads[b.headHash] = b.name;
-      if (!branchColorMap[b.name] && b.color) {
+      if (b.color && !branchColorMap[b.name]) {
         branchColorMap[b.name] = b.color;
-      } else if (!branchColorMap[b.name]) {
-        getBranchColor(b.name);
       }
     });
   }
 
   const commitLane = [];
+  const usedLanes = new Set();
 
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i];
     let lane = laneMap[c.hash];
 
     if (lane === undefined) {
-      lane = -1;
-      for (const l of activeLanes) {
-        lane = l;
-        break;
-      }
-      if (lane === -1) {
-        lane = nextLane++;
+      const firstParent = c.parents && c.parents.length > 0 ? c.parents[0] : null;
+      const parentLane = firstParent ? laneMap[firstParent] : undefined;
+
+      if (parentLane !== undefined && !usedLanes.has(parentLane)) {
+        lane = parentLane;
+      } else {
+        lane = -1;
+        const sortedUsed = [...usedLanes].sort((a, b) => a - b);
+        for (let l = 0; l <= sortedUsed.length; l++) {
+          if (!usedLanes.has(l)) {
+            lane = l;
+            break;
+          }
+        }
+        if (lane === -1) {
+          lane = nextLane++;
+        }
       }
     }
 
     commitLane[i] = lane;
+    usedLanes.add(lane);
+    laneCommitMap[lane] = i;
 
     if (c.parents && c.parents.length > 0) {
       const firstParent = c.parents[0];
@@ -141,18 +153,33 @@ function assignLanes(commits, branches, existingLaneMap, append) {
         if (laneMap[parentHash] === undefined) {
           let newLane = nextLane++;
           laneMap[parentHash] = newLane;
-          activeLanes.add(newLane);
+          usedLanes.add(newLane);
         }
       }
     }
 
     if (!c.parents || c.parents.length === 0) {
-      activeLanes.delete(lane);
+      usedLanes.delete(lane);
     }
   }
 
   const laneCount = nextLane;
-  return { commitLane, laneCount, laneMap };
+
+  for (let i = 0; i < commits.length; i++) {
+    const lane = commitLane[i];
+    const c = commits[i];
+
+    if (laneColorMap[lane] === undefined) {
+      if (c.branches && c.branches.length > 0) {
+        laneColorMap[lane] = getBranchColor(c.branches[0]);
+      } else {
+        const colorIdx = lane % BRANCH_COLORS.length;
+        laneColorMap[lane] = BRANCH_COLORS[colorIdx];
+      }
+    }
+  }
+
+  return { commitLane, laneCount, laneMap, laneColorMap };
 }
 
 function renderGraph(commits, branches, append) {
@@ -160,12 +187,14 @@ function renderGraph(commits, branches, append) {
     allCommits = commits;
     commitPositions = [];
     commitLaneMap = {};
+    laneColors = [];
   } else {
     allCommits = allCommits.concat(commits);
   }
 
-  const { commitLane, laneCount, laneMap } = assignLanes(allCommits, branches || [], commitLaneMap, append);
+  const { commitLane, laneCount, laneMap, laneColorMap } = assignLanes(allCommits, branches || [], commitLaneMap, append);
   commitLaneMap = laneMap;
+  laneColors = laneColorMap;
 
   const branchHeads = {};
   if (branches) {
@@ -191,6 +220,16 @@ function renderGraph(commits, branches, append) {
     commitPositions[i] = { x, y, hash: allCommits[i].hash, shortHash: allCommits[i].shortHash, lane };
   }
 
+  for (let lane = 0; lane < laneCount; lane++) {
+    const x = GRAPH_LEFT + (lane * LANE_WIDTH) + (LANE_WIDTH / 2);
+    ctx.strokeStyle = '#1f2937';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
     const pos = commitPositions[i];
@@ -205,15 +244,15 @@ function renderGraph(commits, branches, append) {
           const isCrossLane = pos.lane !== parentPos.lane;
 
           let color;
-          if (c.branches && c.branches.length > 0) {
-            color = getBranchColor(c.branches[0]);
+          if (p === 0) {
+            color = laneColors[pos.lane] || '#9ca3af';
           } else {
-            color = '#9ca3af';
+            color = laneColors[parentPos.lane] || '#9ca3af';
           }
 
           ctx.strokeStyle = color;
           ctx.lineWidth = isMerge ? 2 : 1.5;
-          ctx.globalAlpha = isMerge ? 0.7 : 0.5;
+          ctx.globalAlpha = isMerge ? 0.7 : 0.4;
           ctx.beginPath();
 
           if (isCrossLane) {
@@ -240,11 +279,7 @@ function renderGraph(commits, branches, append) {
     const c = allCommits[i];
     const pos = commitPositions[i];
 
-    let color = '#9ca3af';
-    if (c.branches && c.branches.length > 0) {
-      color = getBranchColor(c.branches[0]);
-    }
-
+    const color = laneColors[pos.lane] || '#9ca3af';
     const isMerge = c.parents && c.parents.length > 1;
 
     if (isMerge) {
@@ -416,6 +451,7 @@ async function refresh() {
     allCommits = [];
     branchColorMap = {};
     commitLaneMap = {};
+    laneColors = [];
     await Promise.all([loadGraph(), loadStatus()]);
   } finally {
     btn.disabled = false;

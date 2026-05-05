@@ -33,6 +33,8 @@ For global access:
 
 ```bash
 sudo cp think-commit-msg think-review /usr/local/bin/
+# Or build think-git-graph from source:
+cd think-git-graph && go build -o ~/.local/bin/think-git-graph .
 ```
 
 ## think-commit-msg
@@ -170,16 +172,50 @@ kill $(cat /tmp/think-git-graph.pid)
 
 ### Features
 
-- Colored branch graph rendered on HTML Canvas
-- Click commits to see full message, author, date, and files changed
-- Current branch indicator with clean/dirty status
-- "Load More" button for pagination (loads 200 commits at a time)
-- Refresh button to update after making changes
-- Zero runtime dependencies — single binary
+- **Git log --graph style layout** — dynamic lane assignment with curved bezier connections between lanes
+- **Colored branch graph** — each branch gets a distinct color, rendered on HTML Canvas
+- **Merge visualization** — double-ring commit nodes for merge commits with cross-lane bezier curves
+- **Click any commit** — slide-in detail panel showing full message, author, date, and files changed with +/- stats
+- **Current branch indicator** — green dot (clean) or yellow dot (uncommitted changes)
+- **Pagination** — loads 200 commits by default, "Load More" button fetches older commits
+- **Refresh button** — manually update the graph after making changes in another terminal
+- **Dark theme** — clean, minimal dark UI with amber accents
+- **Zero runtime dependencies** — single compiled Go binary, no npm, no node_modules
+- **`--detach` mode** — runs in background with PID file, parent waits for URL then exits
+
+### How to Use
+
+```bash
+# Quick start — opens in your default browser
+cd /path/to/any/git/repo
+think-git-graph
+
+# Background mode — returns immediately, browser opens automatically
+think-git-graph --detach
+
+# View the listening URL
+cat /tmp/think-git-graph.url
+
+# Stop the background server
+kill $(cat /tmp/think-git-graph.pid)
+
+# Build from source (requires Go 1.22+)
+cd think-git-graph
+go build -o ~/.local/bin/think-git-graph .
+```
+
+### Building from Source
+
+```bash
+git clone https://github.com/dalpat/git-tools.git
+cd git-tools/think-git-graph
+go build -o ~/.local/bin/think-git-graph .
+```
 
 ### Requirements
 
 - Git
+- Go 1.22+ (only if building from source)
 - A web browser (Chrome, Firefox, Safari, Edge)
 
 ## Configuration
@@ -200,11 +236,11 @@ kill $(cat /tmp/think-git-graph.pid)
 
 ## Requirements
 
-- Git
-- `jq`
-- `curl`
-- Groq API key (free) — only for think-commit-msg and think-review
-- Go 1.22+ (only if building think-git-graph from source)
+| Tool | Dependencies |
+|------|-------------|
+| think-commit-msg | Git, jq, curl, Groq API key |
+| think-review | Git, jq, curl, Groq API key |
+| think-git-graph | Git, Go 1.22+ (build only), web browser |
 
 ## License
 

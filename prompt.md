@@ -12,4 +12,5 @@ You are working on this repo. Your job is to pick exactly ONE open GitHub issue,
 6. Make a git commit of that feature. ONLY WORK ON A SINGLE FEATURE. Commit with a message that references the issue: `fixes #N`.
 7. If, while implementing the feature, you notice that all work is complete, output <promise>COMPLETE</promise>.
 8. Always check progress.md for tracking if all the work is implemented or not. if you feel all work is implemented then update the Readme file for the user consuming this repo.
-9. Close the Issue when done after leaving a comment there. DO not close the parent issue.
+9. Close the Issue when done after leaving a comment there. Also add How to use section.
+10. DO not close the parent issue.

@@ -145,3 +145,12 @@
   - On append: freezes existing lanes via `commitLaneMap`, only assigns new ones to the right
 - Updated test mocks in `gitdata_test.go` and `server_test.go` to include `--topo-order` flag
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 10: Graph UI fix - lane-based coloring and compact layout (#18) - completed
+- Fixed gray commit dots: switched from sparse `c.branches` lookup to lane-based coloring via `laneColorMap`
+- Every lane gets a deterministic color assigned when first used, so all commits are colored
+- Compacted layout: LANE_WIDTH 32→24, DOT_RADIUS 6→5 for tighter graph
+- Added faint vertical lane guide lines (`#1f2937`) for visual structure
+- Connection lines use lane color (first parent = current lane color, other parents = target lane color)
+- Reduced line opacity from 0.5→0.4 for cleaner look
+- All 27 tests pass; binary builds and runs end-to-end
