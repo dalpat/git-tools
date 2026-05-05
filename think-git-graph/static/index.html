@@ -29,6 +29,19 @@
   </div>
 </div>
 
+<div id="detail-overlay" class="hidden fixed inset-0 z-50 flex justify-end">
+  <div id="detail-backdrop" class="absolute inset-0 bg-black/50"></div>
+  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900 border-l border-gray-700 overflow-y-auto shadow-2xl transform transition-transform duration-200">
+    <div class="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <h2 class="text-lg font-semibold text-gray-100">Commit Detail</h2>
+      <button id="detail-close" class="text-gray-400 hover:text-gray-200 text-xl leading-none">&times;</button>
+    </div>
+    <div id="detail-content" class="px-6 py-4">
+      <p class="text-gray-500">Loading...</p>
+    </div>
+  </div>
+</div>
+
 <script>
 const PER_PAGE = 200;
 let currentOffset = 0;
@@ -83,6 +96,7 @@ function renderCommits(commits, append) {
   commits.forEach(c => {
     const row = document.createElement('div');
     row.className = 'flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-900 transition-colors group cursor-pointer';
+    row.dataset.hash = c.hash;
 
     const hashSpan = document.createElement('span');
     hashSpan.className = 'font-mono text-xs text-amber-600 w-16 flex-shrink-0';
@@ -121,7 +135,7 @@ function renderCommits(commits, append) {
     row.appendChild(dateSpan);
 
     row.addEventListener('click', () => {
-      // Detail panel coming in later slice
+      showCommitDetail(c.hash);
     });
 
     list.appendChild(row);
@@ -183,6 +197,60 @@ document.getElementById('load-more-btn').addEventListener('click', loadMore);
 
 loadStatus();
 loadGraph();
+
+function showCommitDetail(hash) {
+  const overlay = document.getElementById('detail-overlay');
+  const content = document.getElementById('detail-content');
+  const panel = document.getElementById('detail-panel');
+
+  overlay.classList.remove('hidden');
+  panel.classList.add('translate-x-0');
+  content.innerHTML = '<p class="text-gray-500">Loading...</p>';
+
+  fetch('/commit/' + hash)
+    .then(resp => resp.json())
+    .then(data => {
+      if (data.error) {
+        content.innerHTML = '<p class="text-red-400">Error: ' + data.error + '</p>';
+        return;
+      }
+      let html = '';
+      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Hash</span><p class="font-mono text-sm text-amber-500 break-all mt-1">' + data.hash + '</p></div>';
+      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Message</span><p class="text-sm text-gray-200 mt-1 whitespace-pre-wrap">' + data.message + '</p></div>';
+      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Author</span><p class="text-sm text-gray-200 mt-1">' + data.author + '</p></div>';
+      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Date</span><p class="text-sm text-gray-200 mt-1">' + data.date + '</p></div>';
+
+      if (data.files && data.files.length > 0) {
+        html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Files Changed (' + data.files.length + ')</span></div>';
+        html += '<div class="border border-gray-800 rounded overflow-hidden">';
+        data.files.forEach(f => {
+          html += '<div class="flex items-center justify-between px-3 py-2 border-b border-gray-800 last:border-b-0 text-sm">';
+          html += '<span class="text-gray-300 font-mono text-xs truncate mr-2">' + f.path + '</span>';
+          html += '<span class="flex items-center gap-2 flex-shrink-0 text-xs">';
+          if (f.additions > 0) html += '<span class="text-green-400">+' + f.additions + '</span>';
+          if (f.deletions > 0) html += '<span class="text-red-400">-' + f.deletions + '</span>';
+          if (f.additions === 0 && f.deletions === 0) html += '<span class="text-gray-500">Bin</span>';
+          html += '</span></div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<p class="text-sm text-gray-500">No files changed.</p>';
+      }
+
+      content.innerHTML = html;
+    })
+    .catch(err => {
+      content.innerHTML = '<p class="text-red-400">Error loading commit detail.</p>';
+    });
+}
+
+function hideCommitDetail() {
+  const overlay = document.getElementById('detail-overlay');
+  overlay.classList.add('hidden');
+}
+
+document.getElementById('detail-close').addEventListener('click', hideCommitDetail);
+document.getElementById('detail-backdrop').addEventListener('click', hideCommitDetail);
 </script>
 </body>
 </html>

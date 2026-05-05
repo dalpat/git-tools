@@ -44,3 +44,16 @@
   - Responsive: author/date hidden on mobile
 - 3 new tests: graph endpoint with data, pagination, defaults (no query params)
 - All 23 tests pass; binary builds and runs end-to-end
+
+## Slice 4: Commit detail - click to see message and files (#12) - completed
+- Added `GET /commit/{hash}` handler returning `{ hash, message, author, date, files }` JSON
+- Added `CommitDetailResponse` struct to server package
+- Registered route as `GET /commit/{hash}` using Go 1.22+ path params
+- Updated `index.html`:
+  - Detail panel slides in from right with semi-transparent backdrop
+  - Commit rows have `data-hash` attribute for click identification
+  - Panel shows: full hash, message, author, date, files with +/- stats
+  - Close via X button or clicking backdrop
+  - Handles errors and empty file lists gracefully
+- 2 new tests: success case with files, not-found with 404
+- All 27 tests pass; binary builds and runs end-to-end

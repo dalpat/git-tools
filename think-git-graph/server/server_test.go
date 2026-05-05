@@ -300,6 +300,85 @@ func TestStartStop(t *testing.T) {
 	}
 }
 
+func TestCommitDetailEndpoint(t *testing.T) {
+	logOutput := "ghi9012345678901234567890123456789012345678\x00Merge pull request #42\x00Alice\x002024-01-17T09:00:00+00:00\n"
+	filesOutput := "10\t5\tsrc/main.go\n3\t0\tsrc/auth/login.go\n"
+
+	mock := &mockRunner{
+		responses: map[string]string{
+			"log -1 --format=%H%x00%s%x00%an%x00%aI ghi9012":                    logOutput,
+			"diff-tree --no-commit-id --numstat -r ghi9012":                      filesOutput,
+			"show --stat=1000 --format= ghi9012":                                 "",
+		},
+	}
+	gd := gitdata.New(mock)
+
+	s, err := New(gd, testAssets)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/commit/ghi9012", nil)
+	w := &mockResponseWriter{header: make(http.Header)}
+	s.handler.ServeHTTP(w, req)
+
+	if w.statusCode != 200 {
+		t.Errorf("status = %d, want 200", w.statusCode)
+	}
+
+	var resp CommitDetailResponse
+	if err := json.Unmarshal(w.body.Bytes(), &resp); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v: body=%s", err, w.body.String())
+	}
+
+	if resp.Hash != "ghi9012345678901234567890123456789012345678" {
+		t.Errorf("Hash = %s", resp.Hash)
+	}
+	if resp.Message != "Merge pull request #42" {
+		t.Errorf("Message = %s", resp.Message)
+	}
+	if resp.Author != "Alice" {
+		t.Errorf("Author = %s", resp.Author)
+	}
+	if resp.Date != "2024-01-17 09:00:00" {
+		t.Errorf("Date = %s", resp.Date)
+	}
+	if len(resp.Files) != 2 {
+		t.Fatalf("len(Files) = %d, want 2", len(resp.Files))
+	}
+	if resp.Files[0].Path != "src/main.go" {
+		t.Errorf("Files[0].Path = %s", resp.Files[0].Path)
+	}
+	if resp.Files[0].Additions != 10 {
+		t.Errorf("Files[0].Additions = %d, want 10", resp.Files[0].Additions)
+	}
+	if resp.Files[0].Deletions != 5 {
+		t.Errorf("Files[0].Deletions = %d, want 5", resp.Files[0].Deletions)
+	}
+}
+
+func TestCommitDetailEndpointNotFound(t *testing.T) {
+	mock := &mockRunner{
+		responses: map[string]string{
+			"log -1 --format=%H%x00%s%x00%an%x00%aI deadbeef": "ERROR: fatal: bad revision",
+		},
+	}
+	gd := gitdata.New(mock)
+
+	s, err := New(gd, testAssets)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/commit/deadbeef", nil)
+	w := &mockResponseWriter{header: make(http.Header)}
+	s.handler.ServeHTTP(w, req)
+
+	if w.statusCode != 404 {
+		t.Errorf("status = %d, want 404", w.statusCode)
+	}
+}
+
 type mockResponseWriter struct {
 	header     http.Header
 	body       bytes.Buffer

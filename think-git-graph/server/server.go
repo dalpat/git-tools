@@ -23,6 +23,14 @@ type GraphResponse struct {
 	Total   int              `json:"total"`
 }
 
+type CommitDetailResponse struct {
+	Hash    string              `json:"hash"`
+	Message string              `json:"message"`
+	Author  string              `json:"author"`
+	Date    string              `json:"date"`
+	Files   []gitdata.FileChange `json:"files"`
+}
+
 type Server struct {
 	gd       *gitdata.GitData
 	httpSrv  *http.Server
@@ -39,6 +47,7 @@ func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 
 	mux.HandleFunc("GET /status", s.handleStatus)
 	mux.HandleFunc("GET /graph", s.handleGraph)
+	mux.HandleFunc("GET /commit/{hash}", s.handleCommitDetail)
 
 	staticFS, err := fs.Sub(assets, "static")
 	if err != nil {
@@ -116,6 +125,35 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 	resp := GraphResponse{
 		Commits: commits,
 		Total:   total,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleCommitDetail(w http.ResponseWriter, r *http.Request) {
+	hash := r.PathValue("hash")
+	if hash == "" {
+		http.Error(w, `{"error":"missing hash"}`, http.StatusBadRequest)
+		return
+	}
+
+	detail, err := s.gd.GetCommitDetail(hash)
+	if err != nil {
+		http.Error(w, `{"error":"commit not found"}`, http.StatusNotFound)
+		return
+	}
+	if detail == nil {
+		http.Error(w, `{"error":"commit not found"}`, http.StatusNotFound)
+		return
+	}
+
+	resp := CommitDetailResponse{
+		Hash:    detail.Hash,
+		Message: detail.Message,
+		Author:  detail.Author,
+		Date:    detail.Date,
+		Files:   detail.Files,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
