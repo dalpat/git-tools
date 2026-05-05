@@ -144,7 +144,7 @@ func TestGetCommits(t *testing.T) {
 	mock := &mockRunner{
 		responses: map[string]string{
 			"rev-list --count HEAD": "3",
-			"log --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P --max-count=200 --skip=0": commitOutput,
+			"log --topo-order --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P --max-count=200 --skip=0": commitOutput,
 			"for-each-ref --format=%(refname:short)%x00%(objectname:short)%x00%(objectname) refs/heads/": branchOutput,
 			"log --format=%H main":          mainLog,
 			"log --format=%H feature/login": featureLog,
@@ -226,7 +226,7 @@ func TestGetCommitsPagination(t *testing.T) {
 	mock := &mockRunner{
 		responses: map[string]string{
 			"rev-list --count HEAD": "10",
-			"log --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P --max-count=2 --skip=5": commitOutput,
+			"log --topo-order --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P --max-count=2 --skip=5": commitOutput,
 		},
 	}
 

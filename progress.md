@@ -128,3 +128,20 @@
 - Labels remain as HTML overlays aligned to the right of the graph area
 - All click interactions (commit detail, canvas click detection) preserved
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 9: Graph UI - git log --graph style dynamic lane layout (#17) - completed
+- Added `--topo-order` flag to `git log` in `GetCommits()` for correct parent-child ordering
+- Rewrote canvas rendering in `static/index.html`:
+  - **Dynamic Lane Assignment**: Anonymous vertical tracks reused when branches merge (git log --graph style)
+  - **Removed Branch Headers**: Branch names appear as colored pills only at branch tips (HEADs)
+  - **Denser Layout**: ROW_HEIGHT=28 (was 48), LANE_WIDTH=32 (was 80), DOT_RADIUS=6 (was 13), LABEL_OFFSET=12
+  - **Curved Bezier Lines**: Cross-lane connections use smooth bezier curves
+  - **Double-Ring Merges**: Merge commits render as outer ring (source branch color) + inner dot
+  - **Lane Freezing on Load-More**: Existing commits never shift horizontally when appending
+  - **Branch Tip Pills**: Colored pills between graph and commit labels for branch HEADs
+- Updated lane assignment algorithm (`assignLanes`):
+  - Processes commits top-to-bottom, assigns leftmost available lane
+  - First parent continues in same lane, other parents get new lanes to the right
+  - On append: freezes existing lanes via `commitLaneMap`, only assigns new ones to the right
+- Updated test mocks in `gitdata_test.go` and `server_test.go` to include `--topo-order` flag
+- All 27 tests pass; binary builds and runs end-to-end

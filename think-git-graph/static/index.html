@@ -65,19 +65,20 @@
 
 <script>
 const PER_PAGE = 200;
-const ROW_HEIGHT = 48;
-const GRAPH_LEFT = 24;
-const LANE_WIDTH = 80;
-const DOT_RADIUS = 13;
-const LABEL_OFFSET = 28;
-const BRANCH_HEADER_HEIGHT = 42;
+const ROW_HEIGHT = 28;
+const GRAPH_LEFT = 16;
+const LANE_WIDTH = 32;
+const DOT_RADIUS = 6;
+const LABEL_OFFSET = 12;
 
 let currentOffset = 0;
 let totalCommits = 0;
 let allCommits = [];
 let branchColorMap = {};
 let commitPositions = [];
+let commitLaneMap = {};
 let canvasHeight = 0;
+let currentBranch = '';
 
 const canvas = document.getElementById('graph-canvas');
 const ctx = canvas.getContext('2d');
@@ -93,16 +94,15 @@ function getBranchColor(branch) {
   return branchColorMap[branch];
 }
 
-function assignLanes(commits, branches) {
-  const branchLane = {};
-  let nextLane = 0;
+function assignLanes(commits, branches, existingLaneMap, append) {
+  const laneMap = append ? { ...existingLaneMap } : {};
+  const activeLanes = new Set();
+  let nextLane = append ? Math.max(0, ...Object.values(existingLaneMap)) + 1 : 0;
 
-  // Pre-assign lanes to all known branches for consistency
+  const branchHeads = {};
   if (branches) {
     branches.forEach(b => {
-      if (branchLane[b.name] === undefined) {
-        branchLane[b.name] = nextLane++;
-      }
+      branchHeads[b.headHash] = b.name;
       if (!branchColorMap[b.name] && b.color) {
         branchColorMap[b.name] = b.color;
       } else if (!branchColorMap[b.name]) {
@@ -115,88 +115,63 @@ function assignLanes(commits, branches) {
 
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i];
-    let lane = -1;
+    let lane = laneMap[c.hash];
 
-    // Use known branch lane if commit is on a branch
-    if (c.branches && c.branches.length > 0) {
-      for (const b of c.branches) {
-        if (branchLane[b] !== undefined) {
-          lane = branchLane[b];
-          break;
-        }
+    if (lane === undefined) {
+      lane = -1;
+      for (const l of activeLanes) {
+        lane = l;
+        break;
       }
       if (lane === -1) {
         lane = nextLane++;
-        branchLane[c.branches[0]] = lane;
       }
     }
 
-    // Inherit from first parent if not on a known branch
-    if (lane === -1 && c.parents && c.parents.length > 0) {
-      for (let j = i - 1; j >= 0; j--) {
-        if (commits[j].hash === c.parents[0]) {
-          lane = commitLane[j];
-          break;
+    commitLane[i] = lane;
+
+    if (c.parents && c.parents.length > 0) {
+      const firstParent = c.parents[0];
+      if (laneMap[firstParent] === undefined) {
+        laneMap[firstParent] = lane;
+      }
+
+      for (let p = 1; p < c.parents.length; p++) {
+        const parentHash = c.parents[p];
+        if (laneMap[parentHash] === undefined) {
+          let newLane = nextLane++;
+          laneMap[parentHash] = newLane;
+          activeLanes.add(newLane);
         }
       }
     }
 
-    if (lane === -1) lane = nextLane++;
-    commitLane[i] = lane;
-  }
-
-  return { commitLane, laneCount: nextLane, branchLane };
-}
-
-function getBranchColorForLane(lane, commitLane, commitIdx) {
-  for (let i = commitIdx; i >= 0; i--) {
-    if (commitLane[i] === lane && allCommits[i].branches && allCommits[i].branches.length > 0) {
-      return getBranchColor(allCommits[i].branches[0]);
+    if (!c.parents || c.parents.length === 0) {
+      activeLanes.delete(lane);
     }
   }
-  for (let i = commitIdx + 1; i < allCommits.length; i++) {
-    if (commitLane[i] === lane && allCommits[i].branches && allCommits[i].branches.length > 0) {
-      return getBranchColor(allCommits[i].branches[0]);
-    }
-  }
-  return '#6b7280';
-}
 
-function findLaneForBranch(branch, commitLane, commits, upToIdx) {
-  for (let i = upToIdx; i >= 0; i--) {
-    if (commits[i].branches && commits[i].branches.includes(branch)) {
-      return commitLane[i];
-    }
-  }
-  return -1;
-}
-
-function drawArrowhead(x, y, angle, color) {
-  const headLen = 7;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x - headLen * Math.cos(angle - Math.PI / 6), y - headLen * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x - headLen * Math.cos(angle + Math.PI / 6), y - headLen * Math.sin(angle + Math.PI / 6));
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+  const laneCount = nextLane;
+  return { commitLane, laneCount, laneMap };
 }
 
 function renderGraph(commits, branches, append) {
   if (!append) {
     allCommits = commits;
     commitPositions = [];
+    commitLaneMap = {};
   } else {
     allCommits = allCommits.concat(commits);
   }
 
-  const { commitLane, laneCount, branchLane } = assignLanes(allCommits, branches || []);
+  const { commitLane, laneCount, laneMap } = assignLanes(allCommits, branches || [], commitLaneMap, append);
+  commitLaneMap = laneMap;
 
-  // Build reverse mapping: lane -> branch name(s)
-  const laneBranches = {};
-  for (const [branch, lane] of Object.entries(branchLane)) {
-    if (!laneBranches[lane]) laneBranches[lane] = [];
-    laneBranches[lane].push(branch);
+  const branchHeads = {};
+  if (branches) {
+    branches.forEach(b => {
+      branchHeads[b.headHash] = b.name;
+    });
   }
 
   const graphWidth = GRAPH_LEFT + (laneCount * LANE_WIDTH) + 12;
@@ -204,86 +179,25 @@ function renderGraph(commits, branches, append) {
   const canvasWidth = Math.max(graphWidth + LABEL_OFFSET + labelAreaWidth, 900);
 
   canvas.width = canvasWidth;
-  canvas.height = BRANCH_HEADER_HEIGHT + (allCommits.length * ROW_HEIGHT);
+  canvas.height = allCommits.length * ROW_HEIGHT;
   canvasHeight = canvas.height;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw branch lane headers
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  for (let l = 0; l < laneCount; l++) {
-    const laneLeft = GRAPH_LEFT + (l * LANE_WIDTH);
-    const laneCenter = laneLeft + (LANE_WIDTH / 2);
-    const names = laneBranches[l] || [];
-    const headerText = names.length > 0 ? names[0] : '';
-
-    // Header background
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(laneLeft, 0, LANE_WIDTH, BRANCH_HEADER_HEIGHT);
-
-    // Branch color left border
-    if (names.length > 0) {
-      ctx.fillStyle = getBranchColor(names[0]);
-      ctx.fillRect(laneLeft, 0, 3, BRANCH_HEADER_HEIGHT);
-    }
-
-    // Subtle separator between headers
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(laneLeft + LANE_WIDTH, 0);
-    ctx.lineTo(laneLeft + LANE_WIDTH, BRANCH_HEADER_HEIGHT);
-    ctx.stroke();
-
-    // Branch name (truncate if needed)
-    ctx.fillStyle = '#d1d5db';
-    ctx.font = 'bold 11px ui-sans-serif, system-ui, sans-serif';
-    let displayText = headerText;
-    if (displayText.length > 10) {
-      displayText = displayText.substring(0, 9) + '...';
-    }
-    ctx.fillText(displayText, laneCenter, BRANCH_HEADER_HEIGHT / 2);
-  }
-
-  // Header bottom border
-  ctx.strokeStyle = '#4b5563';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, BRANCH_HEADER_HEIGHT);
-  ctx.lineTo(canvasWidth, BRANCH_HEADER_HEIGHT);
-  ctx.stroke();
-
-  // Draw persistent vertical lane lines
-  ctx.strokeStyle = '#374151';
-  ctx.lineWidth = 1;
-  ctx.globalAlpha = 0.25;
-
-  for (let l = 0; l < laneCount; l++) {
-    const laneX = GRAPH_LEFT + (l * LANE_WIDTH) + (LANE_WIDTH / 2);
-    ctx.beginPath();
-    ctx.moveTo(laneX, BRANCH_HEADER_HEIGHT);
-    ctx.lineTo(laneX, canvasHeight);
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1.0;
-
-  // Compute commit positions
   for (let i = 0; i < allCommits.length; i++) {
     const lane = commitLane[i];
     const x = GRAPH_LEFT + (lane * LANE_WIDTH) + (LANE_WIDTH / 2);
-    const y = BRANCH_HEADER_HEIGHT + (i * ROW_HEIGHT) + (ROW_HEIGHT / 2);
+    const y = (i * ROW_HEIGHT) + (ROW_HEIGHT / 2);
     commitPositions[i] = { x, y, hash: allCommits[i].hash, shortHash: allCommits[i].shortHash, lane };
   }
 
-  // Draw connection lines with arrows
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
     const pos = commitPositions[i];
 
     if (c.parents && c.parents.length > 0) {
-      for (const parentHash of c.parents) {
+      for (let p = 0; p < c.parents.length; p++) {
+        const parentHash = c.parents[p];
         const parentIdx = allCommits.findIndex(p => p.hash === parentHash);
         if (parentIdx !== -1 && parentIdx > i) {
           const parentPos = commitPositions[parentIdx];
@@ -291,98 +205,30 @@ function renderGraph(commits, branches, append) {
           const isCrossLane = pos.lane !== parentPos.lane;
 
           let color;
-          if (isCrossLane) {
-            color = isMerge ? getBranchColorForLane(pos.lane, commitLane, i) : getBranchColorForLane(parentPos.lane, commitLane, parentIdx);
+          if (c.branches && c.branches.length > 0) {
+            color = getBranchColor(c.branches[0]);
           } else {
-            color = getBranchColorForLane(pos.lane, commitLane, i);
+            color = '#9ca3af';
           }
 
           ctx.strokeStyle = color;
-          ctx.lineWidth = isMerge ? 2.5 : 2;
-          ctx.globalAlpha = isMerge ? 0.75 : 0.6;
+          ctx.lineWidth = isMerge ? 2 : 1.5;
+          ctx.globalAlpha = isMerge ? 0.7 : 0.5;
           ctx.beginPath();
 
           if (isCrossLane) {
-            // Curved merge/branch connection
-            const startY = pos.y + DOT_RADIUS + 2;
-            const endY = parentPos.y - DOT_RADIUS - 2;
+            const startY = pos.y + DOT_RADIUS;
+            const endY = parentPos.y - DOT_RADIUS;
             const midY = startY + (endY - startY) / 2;
 
             ctx.moveTo(pos.x, startY);
             ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
-            ctx.stroke();
-
-            // Arrow at parent end - compute tangent of bezier at t=1
-            // tangent ~ (P3 - P2) where P2=(parentPos.x, midY), P3=(parentPos.x, endY)
-            const tangentAngle = Math.atan2(endY - midY, 0.001); // approx straight down or use dx=0
-            drawArrowhead(parentPos.x, endY, Math.PI / 2, color);
           } else {
-            // Straight vertical line within same lane
-            const startY = pos.y + DOT_RADIUS + 2;
-            const endY = parentPos.y - DOT_RADIUS - 2;
+            const startY = pos.y + DOT_RADIUS;
+            const endY = parentPos.y - DOT_RADIUS;
             ctx.moveTo(pos.x, startY);
             ctx.lineTo(parentPos.x, endY);
-            ctx.stroke();
-
-            // Arrow at parent end
-            const angle = Math.atan2(endY - startY, parentPos.x - pos.x);
-            drawArrowhead(parentPos.x, endY, angle, color);
           }
-
-          ctx.globalAlpha = 1.0;
-        }
-      }
-    }
-  }
-
-  // Draw commit nodes
-  for (let i = 0; i < allCommits.length; i++) {
-    const c = allCommits[i];
-    const pos = commitPositions[i];
-
-    let color = '#6b7280';
-    if (c.branches && c.branches.length > 0) {
-      color = getBranchColor(c.branches[0]);
-    }
-
-    // Outer glow for active commits
-    if (c.branches && c.branches.length > 0) {
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS + 3, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.15;
-      ctx.fill();
-      ctx.globalAlpha = 1.0;
-    }
-
-    // Main node circle
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.strokeStyle = '#111827';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Inner highlight for depth
-    ctx.beginPath();
-    ctx.arc(pos.x - 3, pos.y - 3, DOT_RADIUS / 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fill();
-
-    // Secondary branch dots for commits on multiple branches
-    if (c.branches && c.branches.length > 1) {
-      for (let b = 1; b < c.branches.length; b++) {
-        const bLane = findLaneForBranch(c.branches[b], commitLane, allCommits, i);
-        if (bLane !== -1 && bLane !== pos.lane) {
-          const bX = GRAPH_LEFT + (bLane * LANE_WIDTH) + (LANE_WIDTH / 2);
-          ctx.beginPath();
-          ctx.arc(bX, pos.y, DOT_RADIUS - 5, 0, Math.PI * 2);
-          ctx.fillStyle = getBranchColor(c.branches[b]);
-          ctx.globalAlpha = 0.8;
-          ctx.fill();
-          ctx.strokeStyle = '#111827';
-          ctx.lineWidth = 2;
           ctx.stroke();
           ctx.globalAlpha = 1.0;
         }
@@ -390,7 +236,38 @@ function renderGraph(commits, branches, append) {
     }
   }
 
-  // Render HTML commit labels
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+
+    let color = '#9ca3af';
+    if (c.branches && c.branches.length > 0) {
+      color = getBranchColor(c.branches[0]);
+    }
+
+    const isMerge = c.parents && c.parents.length > 1;
+
+    if (isMerge) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS + 2, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.8;
+      ctx.stroke();
+      ctx.globalAlpha = 1.0;
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+  }
+
   labelsContainer.innerHTML = '';
   labelsContainer.style.width = canvasWidth + 'px';
   labelsContainer.style.height = canvasHeight + 'px';
@@ -399,15 +276,24 @@ function renderGraph(commits, branches, append) {
 
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
+    const pos = commitPositions[i];
     const label = document.createElement('div');
     label.className = 'commit-label flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-800/50 transition-colors';
     label.style.left = labelLeft + 'px';
-    label.style.top = (BRANCH_HEADER_HEIGHT + i * ROW_HEIGHT + 4) + 'px';
-    label.style.height = (ROW_HEIGHT - 8) + 'px';
+    label.style.top = (i * ROW_HEIGHT + 2) + 'px';
+    label.style.height = (ROW_HEIGHT - 4) + 'px';
     label.style.minWidth = '320px';
     label.dataset.hash = c.hash;
 
+    let branchPill = '';
+    if (branchHeads[c.hash]) {
+      const branchName = branchHeads[c.hash];
+      const bColor = getBranchColor(branchName);
+      branchPill = '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium mr-1" style="background-color: ' + bColor + '20; color: ' + bColor + ';">' + escapeHtml(branchName) + '</span>';
+    }
+
     label.innerHTML =
+      branchPill +
       '<span class="font-mono text-xs text-amber-600 w-16 flex-shrink-0">' + escapeHtml(c.shortHash) + '</span>' +
       '<span class="commit-msg text-sm text-gray-300 flex-1 truncate transition-colors">' + escapeHtml(c.message) + '</span>' +
       '<span class="text-xs text-gray-600 w-20 flex-shrink-0 text-right hidden md:block">' + relativeDate(c.date) + '</span>';
@@ -454,7 +340,7 @@ canvas.addEventListener('click', (e) => {
   for (const pos of commitPositions) {
     const dx = mx - pos.x;
     const dy = my - pos.y;
-    if (dx * dx + dy * dy <= (DOT_RADIUS + 6) * (DOT_RADIUS + 6)) {
+    if (dx * dx + dy * dy <= (DOT_RADIUS + 4) * (DOT_RADIUS + 4)) {
       showCommitDetail(pos.hash);
       return;
     }
@@ -496,7 +382,7 @@ async function loadGraph() {
     renderGraph(data.commits, data.branches, false);
   } catch (err) {
     document.getElementById('graph-container').innerHTML =
-      '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
+       '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
   }
 }
 
@@ -504,12 +390,12 @@ async function loadStatus() {
   try {
     const resp = await fetch('/status');
     const data = await resp.json();
-    const branch = data.currentBranch || '(detached HEAD)';
+    currentBranch = data.currentBranch || '(detached HEAD)';
     const statusDot = data.hasUncommitted
       ? '<span class="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1" title="Uncommitted changes"></span>'
       : '<span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1" title="Clean working tree"></span>';
     document.getElementById('branch-indicator').innerHTML =
-      statusDot + '<span class="font-mono text-gray-200">' + branch + '</span>';
+      statusDot + '<span class="font-mono text-gray-200">' + currentBranch + '</span>';
   } catch (err) {
     document.getElementById('branch-indicator').innerHTML =
       '<span class="text-red-400">Error loading status</span>';
@@ -529,6 +415,7 @@ async function refresh() {
     currentOffset = 0;
     allCommits = [];
     branchColorMap = {};
+    commitLaneMap = {};
     await Promise.all([loadGraph(), loadStatus()]);
   } finally {
     btn.disabled = false;

@@ -134,7 +134,7 @@ func TestGraphEndpoint(t *testing.T) {
 	branchData := "main\x00abc1234\x00abc1234567890123456789012345678901234567\n" +
 		"feature/login\x00def5678\x00def5678901234567890123456789012345678901\n"
 
-	logFormat := "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
+	logFormat := "--topo-order --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
 	refsFormat := "--format=%(refname:short)%x00%(objectname:short)%x00%(objectname)"
 
 	mock := &mockRunner{
@@ -181,7 +181,7 @@ func TestGraphEndpoint(t *testing.T) {
 }
 
 func TestGraphEndpointPagination(t *testing.T) {
-	logFormat := "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
+	logFormat := "--topo-order --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
 	refsFormat := "--format=%(refname:short)%x00%(objectname:short)%x00%(objectname)"
 
 	page2Data := "ghi9012345678901234567890123456789012345678\x00ghi9012\x00Third commit\x00Charlie\x002024-03-01T10:00:00+00:00\x00\n"
@@ -222,7 +222,7 @@ func TestGraphEndpointPagination(t *testing.T) {
 }
 
 func TestGraphEndpointDefaults(t *testing.T) {
-	logFormat := "--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
+	logFormat := "--topo-order --format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P"
 	refsFormat := "--format=%(refname:short)%x00%(objectname:short)%x00%(objectname)"
 
 	mock := &mockRunner{

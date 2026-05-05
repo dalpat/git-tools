@@ -91,6 +91,7 @@ func (g *GitData) GetCommits(limit, offset int) ([]Commit, int, error) {
 	}
 
 	out, err := g.runner.Run("log",
+		"--topo-order",
 		"--format=%H%x00%h%x00%s%x00%an%x00%aI%x00%P",
 		"--max-count="+strconv.Itoa(limit),
 		"--skip="+strconv.Itoa(offset),
