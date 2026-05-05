@@ -168,19 +168,16 @@ function renderGraph(commits, branches, append) {
       const nextX = GRAPH_LEFT + (nextLane * LANE_WIDTH) + (LANE_WIDTH / 2);
       const nextY = ((i + 1) * ROW_HEIGHT) + (ROW_HEIGHT / 2);
 
-      for (let l = 0; l <= Math.max(lane, nextLane); l++) {
+      for (let l = 0; l < laneCount; l++) {
         const laneX = GRAPH_LEFT + (l * LANE_WIDTH) + (LANE_WIDTH / 2);
         const isCommitLane = (l === lane || l === nextLane);
-        const isBetween = (l >= Math.min(lane, nextLane) && l <= Math.max(lane, nextLane));
 
-        if (isBetween) {
-          ctx.strokeStyle = isCommitLane ? getBranchColorForLane(l, commitLane, i) : '#374151';
-          ctx.globalAlpha = isCommitLane ? 1.0 : 0.3;
-          ctx.beginPath();
-          ctx.moveTo(laneX, y);
-          ctx.lineTo(laneX, nextY);
-          ctx.stroke();
-        }
+        ctx.strokeStyle = isCommitLane ? getBranchColorForLane(l, commitLane, i) : '#374151';
+        ctx.globalAlpha = isCommitLane ? 1.0 : 0.3;
+        ctx.beginPath();
+        ctx.moveTo(laneX, y);
+        ctx.lineTo(laneX, nextY);
+        ctx.stroke();
       }
       ctx.globalAlpha = 1.0;
     }
@@ -292,7 +289,9 @@ function escapeHtml(str) {
 }
 
 function relativeDate(dateStr) {
-  const date = new Date(dateStr.replace(' ', 'T') + 'Z');
+  const parts = dateStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (!parts) return dateStr;
+  const date = new Date(+parts[1], +parts[2] - 1, +parts[3], +parts[4], +parts[5], +parts[6]);
   const now = new Date();
   const diffMs = now - date;
   const diffSec = Math.floor(diffMs / 1000);
@@ -331,9 +330,13 @@ async function loadMore() {
   btn.disabled = true;
 
   try {
-    currentOffset += PER_PAGE;
-    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=' + currentOffset);
+    const newOffset = currentOffset + PER_PAGE;
+    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=' + newOffset);
     const data = await resp.json();
+    if (data.branches) {
+      data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
+    }
+    currentOffset = newOffset;
     renderGraph(data.commits, data.branches, true);
   } catch (err) {
     btn.textContent = 'Error';

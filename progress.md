@@ -87,3 +87,23 @@
 - Refresh button already functional from earlier slice; verified working end-to-end
 - README already documents `think-git-graph` usage; no changes needed
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 7: UI Requirements - visual design and interaction spec compliance (#15) - completed
+- Verified all acceptance criteria from #15 against current implementation:
+  - Dark theme colors match spec exactly (bg-gray-950, bg-gray-900/50, text-gray-100/300/500, amber accents)
+  - Header layout matches spec: title, commit count, refresh button, branch indicator
+  - Branch indicator shows correct branch name and clean/dirty status with proper tooltips
+  - Graph renders colored branch lines, commit dots, merge curves, and multi-branch secondary dots
+  - Commit labels display hash, message, relative date with correct typography and spacing
+  - Hover effects work: label background + message color transition to amber
+  - Detail panel slides in from right with 200ms translate-x transition
+  - Detail panel shows hash, message, author, date, and files changed with correct layout
+  - Files changed section shows path, additions/deletions stats, binary markers
+  - Refresh button spin animation, Load More pagination, error states all functional
+  - Responsive: relative date hidden on mobile, visible on md+
+  - All 15 branch colors visually distinct and deterministic
+- Bug fixes in `static/index.html` to ensure spec compliance:
+  - Fixed canvas lane drawing to render all lanes (inactive lanes shown in gray)
+  - Fixed `relativeDate` to correctly parse local date strings without UTC shift
+  - Fixed `loadMore` to preserve server branch colors and prevent offset drift on error
+- All 27 tests pass; binary builds and runs end-to-end
