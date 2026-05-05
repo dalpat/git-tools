@@ -107,3 +107,24 @@
   - Fixed `relativeDate` to correctly parse local date strings without UTC shift
   - Fixed `loadMore` to preserve server branch colors and prevent offset drift on error
 - All 27 tests pass; binary builds and runs end-to-end
+
+## Slice 8: Graph UI - true GitFlow-style branch lane visualization (#16) - completed
+- Rewrote canvas rendering in `static/index.html`:
+  - **Branch Lane Layout**: Each unique branch has its own vertical column with persistent lane assignment
+  - **Branch Headers**: Canvas-drawn header row showing branch names with color indicators and dark background
+  - **Large Commit Nodes**: Increased DOT_RADIUS from 5px to 13px with outer glow and inner highlight for depth
+  - **Persistent Vertical Lines**: Faint vertical lane guides run the full height of the graph
+  - **Directional Arrows**: All connection lines have arrowheads at the parent end showing commit flow direction
+  - **Merge Visualization**: Improved bezier curves for cross-lane connections with proper arrowheads
+  - **Secondary Branch Dots**: Commits on multiple branches show smaller dots on their additional lanes
+  - **Horizontal Scrolling**: Canvas width expands to fit all lanes + label area; container `overflow: auto` handles scrolling
+  - **Vertical Scrolling**: Preserved via container max-height
+  - **Dark Theme Preserved**: All colors match existing dark theme (gray-950, gray-900, amber accents)
+- Improved lane assignment algorithm (`assignLanes`):
+  - Pre-assigns lanes to all known branches from server for consistency
+  - Commits inherit parent lane when not on a known branch
+  - Branch-to-lane mapping is stable across re-renders and pagination
+- Increased spacing: ROW_HEIGHT 36→48, LANE_WIDTH 28→80 for better visual separation
+- Labels remain as HTML overlays aligned to the right of the graph area
+- All click interactions (commit detail, canvas click detection) preserved
+- All 27 tests pass; binary builds and runs end-to-end
