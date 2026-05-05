@@ -97,7 +97,7 @@ function getBranchColor(branch) {
 }
 
 function assignLanes(commits, branches, existingLaneMap, append) {
-  const laneMap = {};
+  const laneMap = {}; // hash -> lane (pre-assigned by children)
   const laneColorMap = {};
   let nextLane = 0;
 
@@ -110,51 +110,48 @@ function assignLanes(commits, branches, existingLaneMap, append) {
   }
 
   const commitLane = [];
-  const usedLanes = new Set();
 
   for (let i = 0; i < commits.length; i++) {
     const c = commits[i];
-
-    const firstParent = c.parents && c.parents.length > 0 ? c.parents[0] : null;
-    const parentLane = firstParent ? laneMap[firstParent] : undefined;
-
     let lane;
-    if (parentLane !== undefined && !usedLanes.has(parentLane)) {
-      lane = parentLane;
+
+    // If a child already assigned us a lane, use it
+    if (laneMap[c.hash] !== undefined) {
+      lane = laneMap[c.hash];
     } else {
-      lane = -1;
-      const sortedUsed = [...usedLanes].sort((a, b) => a - b);
-      for (let l = 0; l <= sortedUsed.length; l++) {
-        if (!usedLanes.has(l)) {
-          lane = l;
-          break;
-        }
+      // Otherwise find the leftmost free lane
+      const used = new Set(Object.values(laneMap));
+      lane = 0;
+      while (used.has(lane)) {
+        lane++;
       }
-      if (lane === -1) {
-        lane = nextLane++;
+      if (lane >= nextLane) {
+        nextLane = lane + 1;
       }
     }
 
     commitLane[i] = lane;
-    usedLanes.add(lane);
 
     if (c.parents && c.parents.length > 0) {
+      // First parent continues in this lane
+      const firstParent = c.parents[0];
       if (laneMap[firstParent] === undefined) {
         laneMap[firstParent] = lane;
       }
 
+      // Other parents branch off to new lanes on the right
       for (let p = 1; p < c.parents.length; p++) {
         const parentHash = c.parents[p];
         if (laneMap[parentHash] === undefined) {
-          let newLane = nextLane++;
+          const used = new Set(Object.values(laneMap));
+          let newLane = nextLane;
+          while (used.has(newLane)) {
+            newLane++;
+          }
           laneMap[parentHash] = newLane;
-          usedLanes.add(newLane);
+          nextLane = newLane + 1;
         }
       }
-    }
-
-    if (!c.parents || c.parents.length === 0) {
-      usedLanes.delete(lane);
     }
   }
 
