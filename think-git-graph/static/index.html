@@ -11,6 +11,7 @@
   <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-800">
     <div class="flex items-center gap-4">
       <h1 class="text-xl font-semibold tracking-tight">think-git-graph</h1>
+      <span id="commit-count" class="text-xs text-gray-500"></span>
     </div>
     <div id="branch-indicator" class="flex items-center gap-2 text-sm text-gray-400">
       <span class="animate-pulse">Loading...</span>
@@ -18,11 +19,150 @@
   </header>
 
   <main id="content" class="text-center py-20 text-gray-500">
-    <p>Commit graph coming soon.</p>
+    <p>Loading commits...</p>
   </main>
+
+  <div id="load-more-container" class="text-center py-6 hidden">
+    <button id="load-more-btn" class="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded transition-colors">
+      Load More
+    </button>
+  </div>
 </div>
 
 <script>
+const PER_PAGE = 200;
+let currentOffset = 0;
+let totalCommits = 0;
+
+// Deterministic branch colors
+const branchColors = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4',
+  '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#84cc16',
+  '#14b8a6', '#6366f1', '#a855f7', '#d946ef', '#0ea5e9',
+];
+
+let branchColorMap = {};
+
+function getBranchColor(branch) {
+  if (!branchColorMap[branch]) {
+    const idx = Object.keys(branchColorMap).length % branchColors.length;
+    branchColorMap[branch] = branchColors[idx];
+  }
+  return branchColorMap[branch];
+}
+
+function relativeDate(dateStr) {
+  const date = new Date(dateStr.replace(' ', 'T') + 'Z');
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return diffMin + 'm ago';
+  if (diffHr < 24) return diffHr + 'h ago';
+  if (diffDay < 30) return diffDay + 'd ago';
+  if (diffDay < 365) return Math.floor(diffDay / 30) + 'mo ago';
+  return Math.floor(diffDay / 365) + 'y ago';
+}
+
+function renderCommits(commits, append) {
+  const container = document.getElementById('content');
+  if (!append) container.innerHTML = '';
+
+  if (commits.length === 0 && !append) {
+    container.innerHTML = '<p class="text-center py-20 text-gray-500">No commits yet.</p>';
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'space-y-0.5';
+
+  commits.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-3 px-3 py-2 rounded hover:bg-gray-900 transition-colors group cursor-pointer';
+
+    const hashSpan = document.createElement('span');
+    hashSpan.className = 'font-mono text-xs text-amber-600 w-16 flex-shrink-0';
+    hashSpan.textContent = c.shortHash;
+
+    const msgSpan = document.createElement('span');
+    msgSpan.className = 'text-sm text-gray-200 flex-1 truncate';
+    msgSpan.textContent = c.message;
+
+    const branchBadges = document.createElement('span');
+    branchBadges.className = 'flex items-center gap-1 flex-shrink-0';
+    if (c.branches) {
+      c.branches.forEach(b => {
+        const badge = document.createElement('span');
+        badge.className = 'text-xs px-1.5 py-0.5 rounded font-mono';
+        badge.style.backgroundColor = getBranchColor(b) + '22';
+        badge.style.color = getBranchColor(b);
+        badge.style.border = '1px solid ' + getBranchColor(b) + '44';
+        badge.textContent = b;
+        branchBadges.appendChild(badge);
+      });
+    }
+
+    const authorSpan = document.createElement('span');
+    authorSpan.className = 'text-xs text-gray-500 w-32 flex-shrink-0 text-right hidden md:block';
+    authorSpan.textContent = c.author;
+
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'text-xs text-gray-600 w-20 flex-shrink-0 text-right hidden md:block';
+    dateSpan.textContent = relativeDate(c.date);
+
+    row.appendChild(hashSpan);
+    row.appendChild(msgSpan);
+    row.appendChild(branchBadges);
+    row.appendChild(authorSpan);
+    row.appendChild(dateSpan);
+
+    row.addEventListener('click', () => {
+      // Detail panel coming in later slice
+    });
+
+    list.appendChild(row);
+  });
+
+  container.appendChild(list);
+
+  document.getElementById('load-more-container').classList.toggle('hidden', currentOffset + PER_PAGE >= totalCommits);
+}
+
+async function loadMore() {
+  const btn = document.getElementById('load-more-btn');
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+
+  try {
+    currentOffset += PER_PAGE;
+    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=' + currentOffset);
+    const data = await resp.json();
+    renderCommits(data.commits, true);
+  } catch (err) {
+    btn.textContent = 'Error';
+  } finally {
+    btn.textContent = 'Load More';
+    btn.disabled = false;
+  }
+}
+
+async function loadGraph() {
+  try {
+    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=0');
+    const data = await resp.json();
+    totalCommits = data.total;
+    document.getElementById('commit-count').textContent = totalCommits + ' commits';
+    renderCommits(data.commits, false);
+  } catch (err) {
+    document.getElementById('content').innerHTML =
+      '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
+  }
+}
+
 async function loadStatus() {
   try {
     const resp = await fetch('/status');
@@ -39,7 +179,10 @@ async function loadStatus() {
   }
 }
 
+document.getElementById('load-more-btn').addEventListener('click', loadMore);
+
 loadStatus();
+loadGraph();
 </script>
 </body>
 </html>

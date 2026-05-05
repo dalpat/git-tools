@@ -7,14 +7,20 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/dalpat/git-tools/think-git-graph/gitdata"
 )
 
 type StatusResponse struct {
-	CurrentBranch string `json:"currentBranch"`
-	HasUncommitted bool  `json:"hasUncommitted"`
+	CurrentBranch  string `json:"currentBranch"`
+	HasUncommitted bool   `json:"hasUncommitted"`
+}
+
+type GraphResponse struct {
+	Commits []gitdata.Commit `json:"commits"`
+	Total   int              `json:"total"`
 }
 
 type Server struct {
@@ -32,6 +38,7 @@ func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 	}
 
 	mux.HandleFunc("GET /status", s.handleStatus)
+	mux.HandleFunc("GET /graph", s.handleGraph)
 
 	staticFS, err := fs.Sub(assets, "static")
 	if err != nil {
@@ -76,6 +83,39 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := StatusResponse{
 		CurrentBranch: branch,
 		HasUncommitted: hasUncommitted,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
+	limitStr := r.URL.Query().Get("limit")
+	offsetStr := r.URL.Query().Get("offset")
+
+	limit := 200
+	if limitStr != "" {
+		if v, err := strconv.Atoi(limitStr); err == nil && v > 0 && v <= 500 {
+			limit = v
+		}
+	}
+
+	offset := 0
+	if offsetStr != "" {
+		if v, err := strconv.Atoi(offsetStr); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	commits, total, err := s.gd.GetCommits(limit, offset)
+	if err != nil {
+		http.Error(w, `{"error":"failed to get commits"}`, http.StatusInternalServerError)
+		return
+	}
+
+	resp := GraphResponse{
+		Commits: commits,
+		Total:   total,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
