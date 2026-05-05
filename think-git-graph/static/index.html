@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>think-git-graph</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+<div class="max-w-6xl mx-auto px-4 py-8">
+  <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-800">
+    <div class="flex items-center gap-4">
+      <h1 class="text-xl font-semibold tracking-tight">think-git-graph</h1>
+    </div>
+    <div id="branch-indicator" class="flex items-center gap-2 text-sm text-gray-400">
+      <span class="animate-pulse">Loading...</span>
+    </div>
+  </header>
+
+  <main id="content" class="text-center py-20 text-gray-500">
+    <p>Commit graph coming soon.</p>
+  </main>
+</div>
+
+<script>
+async function loadStatus() {
+  try {
+    const resp = await fetch('/status');
+    const data = await resp.json();
+    const branch = data.currentBranch || '(detached HEAD)';
+    const statusDot = data.hasUncommitted
+      ? '<span class="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1" title="Uncommitted changes"></span>'
+      : '<span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1" title="Clean working tree"></span>';
+    document.getElementById('branch-indicator').innerHTML =
+      statusDot + '<span class="font-mono text-gray-200">' + branch + '</span>';
+  } catch (err) {
+    document.getElementById('branch-indicator').innerHTML =
+      '<span class="text-red-400">Error loading status</span>';
+  }
+}
+
+loadStatus();
+</script>
+</body>
+</html>

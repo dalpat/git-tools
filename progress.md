@@ -12,3 +12,22 @@
   - Branch-to-commit mapping via `buildBranchCommitMap`
 - 17 table-driven tests covering: normal cases, edge cases, merge commits, pagination, empty repos, binary files, date formatting, invalid hashes
 - All tests pass
+
+## Slice 2: HTTP server + /status + current branch UI (#10) - completed
+- Created `think-git-graph/main.go`:
+  - `go:embed` bundles `static/` assets into the binary
+  - Parses `--detach` flag (scaffold, actual logic in later slice)
+  - Starts HTTP server, prints listening URL, auto-opens browser
+  - Graceful shutdown on SIGINT/SIGTERM
+- Created `think-git-graph/server` package:
+  - `GET /status` → returns `{ currentBranch, hasUncommitted }` as JSON
+  - Serves embedded static files via `http.FileServer`
+  - Random free port via `net.Listen("tcp", "127.0.0.1:0")`
+  - `Start()` / `Stop()` for lifecycle management
+- Created `think-git-graph/static/index.html`:
+  - Minimal UI with Tailwind CSS CDN
+  - Current branch indicator with green/yellow status dot
+  - Fetches `/status` on page load
+- Added `HasUncommitted()` to gitdata package for testability
+- 3 tests for server package: status endpoint (table-driven), static file serving, start/stop lifecycle
+- Binary builds and runs: all endpoints verified end-to-end

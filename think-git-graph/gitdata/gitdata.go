@@ -64,6 +64,14 @@ func NewReal() *GitData {
 	return &GitData{runner: &RealRunner{}}
 }
 
+func (g *GitData) HasUncommitted() (bool, error) {
+	out, err := g.runner.Run("status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return len(strings.TrimSpace(out)) > 0, nil
+}
+
 func (g *GitData) GetCurrentBranch() (string, error) {
 	out, err := g.runner.Run("branch", "--show-current")
 	if err != nil {
