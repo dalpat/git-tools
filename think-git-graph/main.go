@@ -103,6 +103,24 @@ func runServer() {
 		fmt.Printf("think-git-graph listening on %s\n", url)
 	}
 
+	// Initialize GitWatcher with server as notifier
+	var watcherManager *gitdata.WatcherManager
+	if _, err := gitdata.GetRepoPath(); err == nil {
+		watcherManager, err = gitdata.NewWatcherManager(srv)
+		if err != nil {
+			log.Printf("warning: could not create git watcher: %v", err)
+			log.Printf("continuing with manual refresh only")
+		} else {
+			watcherManager.Start()
+			if !quiet {
+				fmt.Println("Git file watcher: started")
+			}
+		}
+	} else {
+		log.Printf("warning: not in a git repository: %v", err)
+		log.Printf("continuing without auto-refresh")
+	}
+
 	if !quiet {
 		if err := openBrowser(url); err != nil {
 			log.Printf("could not open browser: %v", err)
@@ -116,6 +134,12 @@ func runServer() {
 	if !quiet {
 		fmt.Println("\nshutting down...")
 	}
+
+	// Stop the watcher
+	if watcherManager != nil {
+		watcherManager.Stop()
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

@@ -36,6 +36,10 @@
       <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium"></span>
     </div>
     <div class="flex items-center gap-3">
+      <div id="auto-refresh-indicator" class="hidden items-center gap-1.5 text-xs text-gray-500" title="Auto-refresh enabled">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span>auto</span>
+      </div>
       <div id="branch-indicator" class="flex items-center gap-2 text-sm">
         <span class="animate-pulse text-gray-400">Loading...</span>
       </div>
@@ -565,6 +569,79 @@ function hideCommitDetail() {
 
 document.getElementById('detail-close').addEventListener('click', hideCommitDetail);
 document.getElementById('detail-backdrop').addEventListener('click', hideCommitDetail);
+
+// Auto-refresh via Server-Sent Events
+let eventSource = null;
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_BASE = 1000; // Start with 1 second
+
+function connectEventSource() {
+  // Close existing connection
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  // Don't reconnect if too many failed attempts
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log('Auto-refresh: Max reconnection attempts reached');
+    return;
+  }
+
+  eventSource = new EventSource('/events');
+
+  eventSource.onopen = function() {
+    reconnectAttempts = 0;
+    document.getElementById('auto-refresh-indicator').classList.remove('hidden');
+    document.getElementById('auto-refresh-indicator').classList.add('flex');
+  };
+
+  eventSource.onmessage = function(event) {
+    // Handle any non-event messages (rarely used)
+  };
+
+  eventSource.addEventListener('connected', function(event) {
+    console.log('Auto-refresh: Connected to server');
+  });
+
+  eventSource.addEventListener('refresh', function(event) {
+    console.log('Auto-refresh: Git changes detected, refreshing...');
+    // Trigger smooth refresh
+    refresh();
+  });
+
+  eventSource.onerror = function(error) {
+    console.log('Auto-refresh: Connection error');
+    document.getElementById('auto-refresh-indicator').classList.add('hidden');
+    document.getElementById('auto-refresh-indicator').classList.remove('flex');
+    
+    // Schedule reconnection with exponential backoff
+    if (eventSource.readyState === EventSource.CLOSED) {
+      reconnectAttempts++;
+      const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts - 1);
+      console.log('Auto-refresh: Reconnecting in ' + delay + 'ms (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')');
+      
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      reconnectTimeout = setTimeout(connectEventSource, delay);
+    }
+  };
+}
+
+// Start auto-refresh connection
+connectEventSource();
+
+// Clean up on page unload
+window.addEventListener('beforeunload', function() {
+  if (eventSource) {
+    eventSource.close();
+  }
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+  }
+});
 </script>
 </body>
 </html>

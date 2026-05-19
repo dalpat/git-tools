@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"embed"
+	"fmt"
 	"io/fs"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dalpat/git-tools/think-git-graph/gitdata"
@@ -32,23 +35,32 @@ type CommitDetailResponse struct {
 	Files   []gitdata.FileChange `json:"files"`
 }
 
+// Server represents the HTTP server
 type Server struct {
-	gd       *gitdata.GitData
-	httpSrv  *http.Server
-	listener net.Listener
-	handler  http.Handler
+	gd            *gitdata.GitData
+	httpSrv       *http.Server
+	listener      net.Listener
+	handler       http.Handler
+	refreshCh     chan struct{}
+	clients       map[chan struct{}]bool
+	clientsMu     sync.RWMutex
+	refreshMu     sync.Mutex
 }
 
+// New creates a new Server instance
 func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 	mux := http.NewServeMux()
 
 	s := &Server{
-		gd: gd,
+		gd:        gd,
+		refreshCh: make(chan struct{}, 10),
+		clients:   make(map[chan struct{}]bool),
 	}
 
 	mux.HandleFunc("GET /status", s.handleStatus)
 	mux.HandleFunc("GET /graph", s.handleGraph)
 	mux.HandleFunc("GET /commit/{hash}", s.handleCommitDetail)
+	mux.HandleFunc("GET /events", s.handleEvents)
 
 	staticFS, err := fs.Sub(assets, "static")
 	if err != nil {
@@ -60,6 +72,7 @@ func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 	return s, nil
 }
 
+// Start starts the HTTP server
 func (s *Server) Start() (int, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -76,10 +89,92 @@ func (s *Server) Start() (int, error) {
 	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 
+// Stop stops the HTTP server
 func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return s.httpSrv.Shutdown(ctx)
+}
+
+// NotifyRefresh implements the gitdata.RefreshNotifier interface
+// It broadcasts a refresh event to all connected SSE clients
+func (s *Server) NotifyRefresh() {
+	s.refreshMu.Lock()
+	defer s.refreshMu.Unlock()
+
+	// Notify local channel
+	select {
+	case s.refreshCh <- struct{}{}:
+	default:
+	}
+
+	// Notify all SSE clients
+	s.clientsMu.RLock()
+	clients := make([]chan struct{}, 0, len(s.clients))
+	for client := range s.clients {
+		clients = append(clients, client)
+	}
+	s.clientsMu.RUnlock()
+
+	for _, client := range clients {
+		select {
+		case client <- struct{}{}:
+		default:
+		}
+	}
+
+	log.Printf("Server: Refresh notification broadcast to %d clients", len(clients))
+}
+
+// handleEvents serves Server-Sent Events for real-time refresh notifications
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	// Set SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Create a channel for this client
+	clientCh := make(chan struct{}, 1)
+
+	// Register client
+	s.clientsMu.Lock()
+	s.clients[clientCh] = true
+	s.clientsMu.Unlock()
+
+	// Unregister client when done
+	defer func() {
+		s.clientsMu.Lock()
+		delete(s.clients, clientCh)
+		s.clientsMu.Unlock()
+		close(clientCh)
+	}()
+
+	// Flush the headers
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	// Send initial connection event
+	fmt.Fprintf(w, "event: connected\ndata: {}\n\n")
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	// Listen for refresh events or client disconnect
+	for {
+		select {
+		case <-clientCh:
+			// Send refresh event
+			fmt.Fprintf(w, "event: refresh\ndata: {}\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		case <-r.Context().Done():
+			// Client disconnected
+			return
+		}
+	}
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
