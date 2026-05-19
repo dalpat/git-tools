@@ -49,6 +49,11 @@ type BranchStatus struct {
 	RemoteTracking string    `json:"remoteTracking"`
 }
 
+type Tag struct {
+	Name     string `json:"name"`
+	CommitHash string `json:"commitHash"`
+}
+
 type Runner interface {
 	Run(args ...string) (string, error)
 }
@@ -138,6 +143,18 @@ func (g *GitData) GetBranches() ([]Branch, error) {
 	}
 
 	return parseBranches(out), nil
+}
+
+func (g *GitData) GetTags() ([]Tag, error) {
+	out, err := g.runner.Run("for-each-ref",
+		"--format=%(refname:short)%x00%(objectname:short)",
+		"refs/tags/",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return parseTags(out), nil
 }
 
 func (g *GitData) GetCommitDetail(hash string) (*CommitDetail, error) {
@@ -248,6 +265,25 @@ func parseBranches(input string) []Branch {
 		})
 	}
 	return branches
+}
+
+func parseTags(input string) []Tag {
+	var tags []Tag
+	lines := strings.Split(strings.TrimSpace(input), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "\x00")
+		if len(parts) < 2 {
+			continue
+		}
+		tags = append(tags, Tag{
+			Name:       parts[0],
+			CommitHash: parts[1],
+		})
+	}
+	return tags
 }
 
 func parseCommitDetail(input string, hash string) *CommitDetail {

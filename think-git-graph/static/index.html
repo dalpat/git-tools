@@ -34,6 +34,7 @@
       </div>
       <h1 class="text-xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
       <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium"></span>
+      <span id="tag-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-amber-400 font-medium hidden"></span>
     </div>
     <div class="flex items-center gap-3">
       <div id="auto-refresh-indicator" class="hidden items-center gap-1.5 text-xs text-gray-500" title="Auto-refresh enabled">
@@ -93,6 +94,7 @@ const LABEL_OFFSET = 10;
 let currentOffset = 0;
 let totalCommits = 0;
 let allCommits = [];
+let allTags = [];
 let branchColorMap = {};
 let commitPositions = [];
 let commitLaneMap = {};
@@ -193,14 +195,30 @@ function assignLanes(commits, branches, existingLaneMap, append) {
   return { commitLane, laneCount, laneMap, laneColorMap };
 }
 
-function renderGraph(commits, branches, append) {
+function renderGraph(commits, branches, tags, append) {
   if (!append) {
     allCommits = commits;
+    allTags = tags || [];
     commitPositions = [];
     commitLaneMap = {};
     laneColors = [];
   } else {
     allCommits = allCommits.concat(commits);
+    allTags = tags || allTags;
+  }
+
+  // Build commit -> tags mapping
+  const commitTagsMap = {};
+  for (const tag of allTags) {
+    if (!commitTagsMap[tag.commitHash]) {
+      commitTagsMap[tag.commitHash] = [];
+    }
+    commitTagsMap[tag.commitHash].push(tag.name);
+  }
+
+  // Assign tags to commits
+  for (const commit of allCommits) {
+    commit.tags = commitTagsMap[commit.hash] || [];
   }
 
   const { commitLane, laneCount, laneMap, laneColorMap } = assignLanes(allCommits, branches || [], commitLaneMap, append);
@@ -439,7 +457,7 @@ async function loadMore() {
       data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
     }
     currentOffset = newOffset;
-    renderGraph(data.commits, data.branches, true);
+    renderGraph(data.commits, data.branches, data.tags, true);
   } catch (err) {
     btn.textContent = 'Error';
   } finally {
@@ -454,11 +472,21 @@ async function loadGraph() {
     const data = await resp.json();
     totalCommits = data.total;
     document.getElementById('commit-count').textContent = totalCommits + ' commits';
+    
+    // Show tag count
+    const tagCountEl = document.getElementById('tag-count');
+    if (data.tags && data.tags.length > 0) {
+      tagCountEl.textContent = data.tags.length + ' tags';
+      tagCountEl.classList.remove('hidden');
+    } else {
+      tagCountEl.classList.add('hidden');
+    }
+    
     branchColorMap = {};
     if (data.branches) {
       data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
     }
-    renderGraph(data.commits, data.branches, false);
+    renderGraph(data.commits, data.branches, data.tags, false);
   } catch (err) {
     document.getElementById('graph-container').innerHTML =
        '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
@@ -527,6 +555,7 @@ async function refresh() {
   try {
     currentOffset = 0;
     allCommits = [];
+    allTags = [];
     branchColorMap = {};
     commitLaneMap = {};
     laneColors = [];

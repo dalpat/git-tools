@@ -25,6 +25,7 @@ type StatusResponse struct {
 type GraphResponse struct {
 	Commits  []gitdata.Commit `json:"commits"`
 	Branches []gitdata.Branch `json:"branches"`
+	Tags     []gitdata.Tag    `json:"tags"`
 	Total    int              `json:"total"`
 }
 
@@ -232,9 +233,15 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		branches = []gitdata.Branch{}
 	}
 
+	tags, _ := s.gd.GetTags()
+	if tags == nil {
+		tags = []gitdata.Tag{}
+	}
+
 	resp := GraphResponse{
 		Commits:  commits,
 		Branches: branches,
+		Tags:     tags,
 		Total:    total,
 	}
 
