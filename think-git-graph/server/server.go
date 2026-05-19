@@ -17,8 +17,9 @@ import (
 )
 
 type StatusResponse struct {
-	CurrentBranch  string `json:"currentBranch"`
-	HasUncommitted bool   `json:"hasUncommitted"`
+	CurrentBranch  string            `json:"currentBranch"`
+	HasUncommitted bool              `json:"hasUncommitted"`
+	BranchStatus   *gitdata.BranchStatus `json:"branchStatus,omitempty"`
 }
 
 type GraphResponse struct {
@@ -188,6 +189,14 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	resp := StatusResponse{
 		CurrentBranch: branch,
 		HasUncommitted: hasUncommitted,
+	}
+
+	// Get branch status for current branch
+	if branch != "" {
+		branchStatus, err := s.gd.GetBranchStatus(branch)
+		if err == nil {
+			resp.BranchStatus = branchStatus
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

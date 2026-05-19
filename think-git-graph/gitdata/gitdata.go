@@ -37,6 +37,18 @@ type CommitDetail struct {
 	Files   []FileChange `json:"files"`
 }
 
+type BranchStatus struct {
+	Name           string    `json:"name"`
+	AheadOfMain    int       `json:"aheadOfMain"`
+	BehindMain     int       `json:"behindMain"`
+	AheadOfRemote  int       `json:"aheadOfRemote"`
+	BehindRemote   int       `json:"behindRemote"`
+	IsMergedToMain bool      `json:"isMergedToMain"`
+	LastCommitDate time.Time `json:"lastCommitDate"`
+	Age            string    `json:"age"`
+	RemoteTracking string    `json:"remoteTracking"`
+}
+
 type Runner interface {
 	Run(args ...string) (string, error)
 }
@@ -352,4 +364,175 @@ func formatDate(isoDate string) string {
 		return isoDate
 	}
 	return t.Format("2006-01-02 15:04:05")
+}
+
+// GetBranchStatus calculates comprehensive status for a branch
+func (g *GitData) GetBranchStatus(branchName string) (*BranchStatus, error) {
+	status := &BranchStatus{
+		Name: branchName,
+	}
+
+	// Get ahead/behind vs main
+	aheadMain, behindMain, err := g.getAheadBehind(branchName, "main")
+	if err != nil {
+		// Try origin/main as fallback
+		aheadMain, behindMain, err = g.getAheadBehind(branchName, "origin/main")
+	}
+	if err == nil {
+		status.AheadOfMain = aheadMain
+		status.BehindMain = behindMain
+	}
+
+	// Get remote tracking branch
+	remoteBranch, err := g.getRemoteTrackingBranch(branchName)
+	if err == nil && remoteBranch != "" {
+		status.RemoteTracking = remoteBranch
+		// Get ahead/behind vs remote tracking branch
+		aheadRemote, behindRemote, err := g.getAheadBehind(branchName, remoteBranch)
+		if err == nil {
+			status.AheadOfRemote = aheadRemote
+			status.BehindRemote = behindRemote
+		}
+	}
+
+	// Check if merged to main
+	isMerged, err := g.isBranchMergedToMain(branchName)
+	if err == nil {
+		status.IsMergedToMain = isMerged
+	}
+
+	// Get last commit date and calculate age
+	lastCommitDate, age, err := g.getBranchAge(branchName)
+	if err == nil {
+		status.LastCommitDate = lastCommitDate
+		status.Age = age
+	}
+
+	return status, nil
+}
+
+// getAheadBehind calculates ahead/behind counts using git rev-list --count
+func (g *GitData) getAheadBehind(branch, base string) (ahead, behind int, err error) {
+	// Check if base exists
+	_, err = g.runner.Run("rev-parse", "--verify", base)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Calculate commits ahead (in branch but not in base)
+	aheadOut, err := g.runner.Run("rev-list", "--count", base+".."+branch)
+	if err != nil {
+		return 0, 0, err
+	}
+	ahead, _ = strconv.Atoi(strings.TrimSpace(aheadOut))
+
+	// Calculate commits behind (in base but not in branch)
+	behindOut, err := g.runner.Run("rev-list", "--count", branch+".."+base)
+	if err != nil {
+		return 0, 0, err
+	}
+	behind, _ = strconv.Atoi(strings.TrimSpace(behindOut))
+
+	return ahead, behind, nil
+}
+
+// getRemoteTrackingBranch returns the remote tracking branch for a local branch
+func (g *GitData) getRemoteTrackingBranch(branchName string) (string, error) {
+	out, err := g.runner.Run("config", "--get", "branch."+branchName+".remote")
+	if err != nil {
+		return "", err
+	}
+	remote := strings.TrimSpace(out)
+	if remote == "" {
+		return "", nil
+	}
+
+	out, err = g.runner.Run("config", "--get", "branch."+branchName+".merge")
+	if err != nil {
+		return "", err
+	}
+	mergeRef := strings.TrimSpace(out)
+	// Convert refs/heads/xxx to xxx
+	mergeRef = strings.TrimPrefix(mergeRef, "refs/heads/")
+
+	if mergeRef != "" {
+		return remote + "/" + mergeRef, nil
+	}
+	return "", nil
+}
+
+// isBranchMergedToMain checks if a branch is merged into main using git branch --merged
+func (g *GitData) isBranchMergedToMain(branchName string) (bool, error) {
+	// Check if main exists, otherwise try origin/main
+	base := "main"
+	_, err := g.runner.Run("rev-parse", "--verify", base)
+	if err != nil {
+		base = "origin/main"
+		_, err = g.runner.Run("rev-parse", "--verify", base)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	out, err := g.runner.Run("branch", "--merged", base)
+	if err != nil {
+		return false, err
+	}
+
+	branches := strings.Split(out, "\n")
+	for _, b := range branches {
+		b = strings.TrimSpace(b)
+		b = strings.TrimPrefix(b, "* ")
+		if b == branchName {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// getBranchAge returns the last commit date and formatted age string
+func (g *GitData) getBranchAge(branchName string) (time.Time, string, error) {
+	out, err := g.runner.Run("log", "-1", "--format=%aI", branchName)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+
+	isoDate := strings.TrimSpace(out)
+	if isoDate == "" {
+		return time.Time{}, "", nil
+	}
+
+	lastCommitDate, err := time.Parse(time.RFC3339, isoDate)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+
+	age := formatAge(time.Since(lastCommitDate))
+	return lastCommitDate, age, nil
+}
+
+// formatAge converts a duration to a human-readable age string
+func formatAge(d time.Duration) string {
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	minutes := int(d.Minutes()) % 60
+
+	if days > 365 {
+		years := days / 365
+		return strconv.Itoa(years) + "y"
+	}
+	if days > 30 {
+		months := days / 30
+		return strconv.Itoa(months) + "mo"
+	}
+	if days > 0 {
+		return strconv.Itoa(days) + "d"
+	}
+	if hours > 0 {
+		return strconv.Itoa(hours) + "h"
+	}
+	if minutes > 0 {
+		return strconv.Itoa(minutes) + "m"
+	}
+	return "now"
 }

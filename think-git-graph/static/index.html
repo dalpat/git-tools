@@ -473,8 +473,42 @@ async function loadStatus() {
     const statusDot = data.hasUncommitted
       ? '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 text-xs font-medium border border-yellow-500/20" title="Uncommitted changes"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>modified</span>'
       : '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 text-xs font-medium border border-green-500/20" title="Clean working tree"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>clean</span>';
+    
+    // Build ahead/behind indicators
+    let aheadBehindHtml = '';
+    if (data.branchStatus) {
+      const bs = data.branchStatus;
+      const parts = [];
+      
+      // Show ahead/behind vs main
+      if (bs.aheadOfMain > 0 || bs.behindMain > 0) {
+        if (bs.aheadOfMain > 0) {
+          parts.push('<span class="text-green-400" title="' + bs.aheadOfMain + ' commit(s) ahead of main">↑' + bs.aheadOfMain + '</span>');
+        }
+        if (bs.behindMain > 0) {
+          parts.push('<span class="text-red-400" title="' + bs.behindMain + ' commit(s) behind main">↓' + bs.behindMain + '</span>');
+        }
+      }
+      
+      // Show ahead/behind vs remote if different from main comparison
+      if (bs.remoteTracking && bs.remoteTracking !== 'origin/main' && bs.remoteTracking !== 'origin/master') {
+        if (bs.aheadOfRemote > 0 || bs.behindRemote > 0) {
+          if (bs.aheadOfRemote > 0) {
+            parts.push('<span class="text-blue-400 text-[10px]" title="' + bs.aheadOfRemote + ' commit(s) ahead of ' + bs.remoteTracking + '">↑' + bs.aheadOfRemote + '</span>');
+          }
+          if (bs.behindRemote > 0) {
+            parts.push('<span class="text-orange-400 text-[10px]" title="' + bs.behindRemote + ' commit(s) behind ' + bs.remoteTracking + '">↓' + bs.behindRemote + '</span>');
+          }
+        }
+      }
+      
+      if (parts.length > 0) {
+        aheadBehindHtml = '<span class="flex items-center gap-1.5 text-xs font-mono bg-gray-800/50 px-1.5 py-0.5 rounded border border-gray-700/50">' + parts.join('') + '</span>';
+      }
+    }
+    
     document.getElementById('branch-indicator').innerHTML =
-      statusDot + '<span class="font-mono text-xs text-gray-300 bg-gray-800 px-2 py-0.5 rounded-md border border-gray-700">' + currentBranch + '</span>';
+      statusDot + '<span class="font-mono text-xs text-gray-300 bg-gray-800 px-2 py-0.5 rounded-md border border-gray-700">' + currentBranch + '</span>' + aheadBehindHtml;
   } catch (err) {
     document.getElementById('branch-indicator').innerHTML =
       '<span class="text-red-400 text-xs">Error loading status</span>';
