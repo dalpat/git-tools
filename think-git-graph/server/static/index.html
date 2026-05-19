@@ -1,2 +1,529 @@
 <!DOCTYPE html>
-<html><head><title>test</title></head><body>think-git-graph test page</body></html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>think-git-graph</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .commit-row:hover {
+            background-color: #1e293b;
+        }
+        .commit-row.selected {
+            background-color: #334155;
+        }
+        .branch-label {
+            font-size: 0.65rem;
+            padding: 1px 4px;
+            border-radius: 2px;
+            margin-left: 4px;
+            white-space: nowrap;
+        }
+        .detail-panel {
+            transition: transform 0.2s ease;
+        }
+        .detail-panel.closed {
+            transform: translateX(100%);
+        }
+        #graph-canvas {
+            cursor: pointer;
+        }
+        .file-addition {
+            color: #4ade80;
+        }
+        .file-deletion {
+            color: #f87171;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 6px;
+        }
+        .status-clean {
+            background-color: #22c55e;
+        }
+        .status-dirty {
+            background-color: #eab308;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+    <!-- Header -->
+    <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-lg font-semibold text-amber-400">think-git-graph</h1>
+            <div id="branch-indicator" class="flex items-center text-sm text-slate-300">
+                <span class="text-slate-500">Loading...</span>
+            </div>
+        </div>
+        <div class="flex items-center space-x-2">
+            <button id="refresh-btn" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs rounded transition-colors">
+                Refresh
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Graph Area -->
+        <div class="flex-1 flex flex-col min-w-0">
+            <div class="flex-1 overflow-auto" id="graph-container">
+                <canvas id="graph-canvas" class="block"></canvas>
+            </div>
+            <!-- Load More -->
+            <div id="load-more-container" class="border-t border-slate-700 p-3 text-center hidden">
+                <button id="load-more-btn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-sm rounded transition-colors">
+                    Load More
+                </button>
+                <span id="commit-count" class="ml-3 text-xs text-slate-500"></span>
+            </div>
+        </div>
+
+        <!-- Detail Panel -->
+        <div id="detail-panel" class="detail-panel closed w-96 bg-slate-800 border-l border-slate-700 flex flex-col shrink-0">
+            <div class="border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+                <h2 class="text-sm font-semibold text-amber-400">Commit Details</h2>
+                <button id="close-detail" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
+            </div>
+            <div id="detail-content" class="flex-1 overflow-auto p-4">
+                <p class="text-slate-500 text-sm">Click a commit to view details</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            commitHeight: 40,
+            laneWidth: 16,
+            dotRadius: 5,
+            mergeDotRadius: 7,
+            lineWidth: 2,
+            leftPadding: 80,
+            rightPadding: 20,
+            defaultLimit: 200
+        };
+
+        let state = {
+            commits: [],
+            branches: [],
+            currentBranch: '',
+            hasUncommitted: false,
+            total: 0,
+            offset: 0,
+            selectedHash: null,
+            commitPositions: new Map(),
+            laneCount: 0
+        };
+
+        const canvas = document.getElementById('graph-canvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('graph-container');
+
+        // Initialize
+        async function init() {
+            await loadStatus();
+            await loadGraph();
+            setupEventListeners();
+        }
+
+        async function loadStatus() {
+            try {
+                const res = await fetch('/status');
+                const data = await res.json();
+                state.currentBranch = data.currentBranch;
+                state.hasUncommitted = data.hasUncommitted;
+                updateBranchIndicator();
+            } catch (err) {
+                console.error('Failed to load status:', err);
+            }
+        }
+
+        function updateBranchIndicator() {
+            const indicator = document.getElementById('branch-indicator');
+            const dotClass = state.hasUncommitted ? 'status-dirty' : 'status-clean';
+            indicator.innerHTML = `
+                <span class="status-dot ${dotClass}"></span>
+                <span class="text-slate-300">${escapeHtml(state.currentBranch || 'unknown')}</span>
+            `;
+        }
+
+        async function loadGraph() {
+            try {
+                const res = await fetch(`/graph?limit=${CONFIG.defaultLimit}&offset=${state.offset}`);
+                const data = await res.json();
+                
+                if (state.offset === 0) {
+                    state.commits = data.commits;
+                } else {
+                    state.commits.push(...data.commits);
+                }
+                state.branches = data.branches;
+                state.total = data.total;
+                state.offset = state.commits.length;
+
+                render();
+                updateLoadMoreButton();
+            } catch (err) {
+                console.error('Failed to load graph:', err);
+            }
+        }
+
+        function updateLoadMoreButton() {
+            const container = document.getElementById('load-more-container');
+            const btn = document.getElementById('load-more-btn');
+            const count = document.getElementById('commit-count');
+            
+            if (state.commits.length > 0) {
+                container.classList.remove('hidden');
+                count.textContent = `${state.commits.length} / ${state.total} commits`;
+                
+                if (state.commits.length >= state.total) {
+                    btn.classList.add('hidden');
+                } else {
+                    btn.classList.remove('hidden');
+                }
+            }
+        }
+
+        function assignLanes() {
+            const laneMap = new Map(); // commit hash -> lane index
+            const activeLanes = new Set(); // lanes currently in use
+            let nextLane = 0;
+
+            state.commits.forEach((commit, index) => {
+                const parents = commit.parents || [];
+                
+                // Find an available lane or create new
+                let lane = -1;
+                
+                // Check if this commit continues an existing lane (it's a parent of a previous commit)
+                for (let i = 0; i < index; i++) {
+                    const prevCommit = state.commits[i];
+                    if (prevCommit.parents && prevCommit.parents.includes(commit.hash)) {
+                        const parentLane = laneMap.get(prevCommit.hash);
+                        if (parentLane !== undefined && !activeLanes.has(parentLane)) {
+                            lane = parentLane;
+                            break;
+                        }
+                    }
+                }
+
+                // If no continuing lane, find free lane or create new
+                if (lane === -1) {
+                    for (let i = 0; i < nextLane; i++) {
+                        if (!activeLanes.has(i)) {
+                            lane = i;
+                            break;
+                        }
+                    }
+                    if (lane === -1) {
+                        lane = nextLane++;
+                    }
+                }
+
+                laneMap.set(commit.hash, lane);
+                activeLanes.add(lane);
+
+                // Mark lanes of parents as in-use for next commits
+                activeLanes.clear();
+                state.commits.slice(0, index + 1).forEach(c => {
+                    if (c.parents) {
+                        c.parents.forEach(p => {
+                            const pLane = laneMap.get(p);
+                            if (pLane !== undefined) {
+                                activeLanes.add(pLane);
+                            }
+                        });
+                    }
+                });
+            });
+
+            state.laneCount = nextLane;
+            return laneMap;
+        }
+
+        function render() {
+            const laneMap = assignLanes();
+            state.commitPositions.clear();
+
+            const width = Math.max(
+                container.clientWidth,
+                CONFIG.leftPadding + (state.laneCount * CONFIG.laneWidth) + CONFIG.rightPadding + 400
+            );
+            const height = state.commits.length * CONFIG.commitHeight + 20;
+
+            canvas.width = width;
+            canvas.height = height;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw branch lines first (behind commits)
+            drawBranchLines(laneMap);
+
+            // Draw commits
+            state.commits.forEach((commit, index) => {
+                const y = index * CONFIG.commitHeight + CONFIG.commitHeight / 2;
+                const lane = laneMap.get(commit.hash) || 0;
+                const x = CONFIG.leftPadding + (lane * CONFIG.laneWidth);
+
+                state.commitPositions.set(commit.hash, { x, y, index, commit });
+
+                const isMerge = commit.parents && commit.parents.length > 1;
+                const color = getBranchColor(commit);
+
+                // Draw dot
+                ctx.beginPath();
+                if (isMerge) {
+                    ctx.arc(x, y, CONFIG.mergeDotRadius, 0, Math.PI * 2);
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.arc(x, y, CONFIG.mergeDotRadius - 3, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                } else {
+                    ctx.arc(x, y, CONFIG.dotRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                }
+
+                // Draw selection highlight
+                if (state.selectedHash === commit.hash) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, (isMerge ? CONFIG.mergeDotRadius : CONFIG.dotRadius) + 4, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Draw commit info
+                drawCommitInfo(commit, x + 20, y, color);
+            });
+        }
+
+        function drawBranchLines(laneMap) {
+            const hashToIndex = new Map();
+            state.commits.forEach((c, i) => hashToIndex.set(c.hash, i));
+
+            ctx.lineWidth = CONFIG.lineWidth;
+
+            state.commits.forEach((commit, index) => {
+                const y1 = index * CONFIG.commitHeight + CONFIG.commitHeight / 2;
+                const lane1 = laneMap.get(commit.hash) || 0;
+                const x1 = CONFIG.leftPadding + (lane1 * CONFIG.laneWidth);
+
+                if (commit.parents) {
+                    commit.parents.forEach((parentHash, parentIdx) => {
+                        const parentIndex = hashToIndex.get(parentHash);
+                        if (parentIndex === undefined) return;
+
+                        const y2 = parentIndex * CONFIG.commitHeight + CONFIG.commitHeight / 2;
+                        const lane2 = laneMap.get(parentHash) || 0;
+                        const x2 = CONFIG.leftPadding + (lane2 * CONFIG.laneWidth);
+
+                        const color = getBranchColor(commit);
+                        ctx.strokeStyle = color;
+
+                        // Draw curved line
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        
+                        const midY = (y1 + y2) / 2;
+                        
+                        if (lane1 === lane2) {
+                            // Same lane - straight line
+                            ctx.lineTo(x2, y2);
+                        } else {
+                            // Different lanes - bezier curve
+                            ctx.bezierCurveTo(x1, midY, x2, midY, x2, y2);
+                        }
+                        
+                        ctx.stroke();
+                    });
+                }
+            });
+        }
+
+        function getBranchColor(commit) {
+            if (!commit.branches || commit.branches.length === 0) {
+                return '#64748b'; // Default slate color
+            }
+            
+            const branchName = commit.branches[0];
+            const branch = state.branches.find(b => b.name === branchName);
+            return branch ? branch.color : '#64748b';
+        }
+
+        function drawCommitInfo(commit, x, y, color) {
+            ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+            ctx.textBaseline = 'middle';
+
+            // Short hash
+            ctx.fillStyle = '#64748b';
+            ctx.fillText(commit.shortHash, x, y);
+
+            // Message
+            ctx.fillStyle = '#e2e8f0';
+            const msgX = x + 70;
+            const maxMsgWidth = 300;
+            let message = commit.message.split('\n')[0];
+            const msgWidth = ctx.measureText(message).width;
+            if (msgWidth > maxMsgWidth) {
+                message = message.substring(0, 40) + '...';
+            }
+            ctx.fillText(message, msgX, y);
+
+            // Branch labels
+            if (commit.branches && commit.branches.length > 0) {
+                let labelX = msgX + Math.min(ctx.measureText(message).width, maxMsgWidth) + 12;
+                commit.branches.forEach(branchName => {
+                    const branch = state.branches.find(b => b.name === branchName);
+                    if (branch) {
+                        const label = branchName === state.currentBranch ? `${branchName} *` : branchName;
+                        const width = ctx.measureText(label).width + 8;
+                        
+                        ctx.fillStyle = branch.color + '33'; // Add transparency
+                        ctx.fillRect(labelX, y - 8, width, 16);
+                        
+                        ctx.fillStyle = branch.color;
+                        ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+                        ctx.fillText(label, labelX + 4, y);
+                        ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+                        
+                        labelX += width + 4;
+                    }
+                });
+            }
+
+            // Author and date
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
+            ctx.fillText(`${commit.author} - ${commit.date}`, x, y + 14);
+        }
+
+        function setupEventListeners() {
+            canvas.addEventListener('click', handleCanvasClick);
+            document.getElementById('refresh-btn').addEventListener('click', () => {
+                state.offset = 0;
+                loadStatus();
+                loadGraph();
+            });
+            document.getElementById('load-more-btn').addEventListener('click', loadGraph);
+            document.getElementById('close-detail').addEventListener('click', closeDetailPanel);
+            window.addEventListener('resize', render);
+        }
+
+        function handleCanvasClick(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left + container.scrollLeft;
+            const y = e.clientY - rect.top + container.scrollTop;
+
+            let clickedCommit = null;
+            for (const [hash, pos] of state.commitPositions) {
+                const dx = x - pos.x;
+                const dy = y - pos.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Check if click is near the commit dot or in the row
+                if (dist < 15 || (y > pos.y - CONFIG.commitHeight/2 && y < pos.y + CONFIG.commitHeight/2 && x < pos.x + 500)) {
+                    clickedCommit = pos.commit;
+                    break;
+                }
+            }
+
+            if (clickedCommit) {
+                selectCommit(clickedCommit);
+            }
+        }
+
+        function selectCommit(commit) {
+            state.selectedHash = commit.hash;
+            render();
+            showCommitDetails(commit);
+        }
+
+        async function showCommitDetails(commit) {
+            const panel = document.getElementById('detail-panel');
+            const content = document.getElementById('detail-content');
+            
+            panel.classList.remove('closed');
+            content.innerHTML = '<p class="text-slate-500 text-sm">Loading...</p>';
+
+            try {
+                const res = await fetch(`/commit/${commit.hash}`);
+                const detail = await res.json();
+                renderDetailContent(detail);
+            } catch (err) {
+                content.innerHTML = '<p class="text-red-400 text-sm">Failed to load commit details</p>';
+            }
+        }
+
+        function renderDetailContent(detail) {
+            const content = document.getElementById('detail-content');
+            
+            const filesHtml = detail.files && detail.files.length > 0
+                ? detail.files.map(f => `
+                    <div class="flex justify-between items-center py-1 text-xs border-b border-slate-700/50 last:border-0">
+                        <span class="text-slate-300 truncate flex-1">${escapeHtml(f.path)}</span>
+                        <span class="ml-2">
+                            <span class="file-addition">+${f.additions}</span>
+                            <span class="file-deletion">-${f.deletions}</span>
+                        </span>
+                    </div>
+                `).join('')
+                : '<p class="text-slate-500 text-xs">No file changes</p>';
+
+            content.innerHTML = `
+                <div class="space-y-4">
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase">Hash</label>
+                        <p class="text-sm font-mono text-amber-400">${detail.hash}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase">Message</label>
+                        <p class="text-sm text-slate-200 whitespace-pre-wrap">${escapeHtml(detail.message)}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase">Author</label>
+                        <p class="text-sm text-slate-300">${escapeHtml(detail.author)}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase">Date</label>
+                        <p class="text-sm text-slate-300">${detail.date}</p>
+                    </div>
+                    <div>
+                        <label class="text-xs text-slate-500 uppercase">Files Changed (${detail.files ? detail.files.length : 0})</label>
+                        <div class="mt-2 space-y-1">
+                            ${filesHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeDetailPanel() {
+            document.getElementById('detail-panel').classList.add('closed');
+            state.selectedHash = null;
+            render();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Start
+        init();
+    </script>
+</body>
+</html>

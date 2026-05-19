@@ -6,58 +6,73 @@
 <title>think-git-graph</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  #graph-container { position: relative; overflow-y: auto; max-height: calc(100vh - 200px); }
+  #graph-container { position: relative; overflow-y: auto; max-height: calc(100vh - 180px); border-radius: 12px; }
   #graph-canvas { display: block; cursor: pointer; }
   #commit-labels { position: absolute; top: 0; pointer-events: none; }
-  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; }
-  .commit-label:hover { background-color: rgba(55, 65, 81, 0.5); }
+  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; border-radius: 6px; transition: all 0.15s ease; }
+  .commit-label:hover { background-color: rgba(55, 65, 81, 0.6); transform: translateX(2px); }
   .commit-label:hover .commit-msg { color: #fbbf24; }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .spin { animation: spin 1s linear infinite; }
-  #refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  #load-more-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  #refresh-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #load-more-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  /* Custom scrollbar for dark theme */
+  #graph-container::-webkit-scrollbar { width: 8px; height: 8px; }
+  #graph-container::-webkit-scrollbar-track { background: #111827; border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb:hover { background: #4b5563; }
 </style>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
-<div class="max-w-7xl mx-auto px-6 py-10">
-  <header class="flex items-center justify-between mb-8 pb-4 border-b border-gray-800">
-    <div class="flex items-center gap-4">
-      <h1 class="text-2xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
-      <span id="commit-count" class="text-xs text-gray-500 font-medium"></span>
+<div class="max-w-7xl mx-auto px-6 py-6">
+  <header class="flex items-center justify-between mb-6 pb-3 border-b border-gray-800">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
+        <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      </div>
+      <h1 class="text-xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
+      <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium"></span>
     </div>
-    <div class="flex items-center gap-4">
-      <button id="refresh-btn" class="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors duration-150 flex items-center gap-2 border border-gray-700 hover:border-gray-600" title="Refresh">
+    <div class="flex items-center gap-3">
+      <div id="branch-indicator" class="flex items-center gap-2 text-sm">
+        <span class="animate-pulse text-gray-400">Loading...</span>
+      </div>
+      <button id="refresh-btn" class="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all duration-150" title="Refresh">
         <svg id="refresh-icon" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
-        <span>Refresh</span>
       </button>
-      <div id="branch-indicator" class="flex items-center gap-2 text-sm text-gray-400">
-        <span class="animate-pulse">Loading...</span>
-      </div>
     </div>
   </header>
 
-  <div id="graph-container" class="rounded-lg border border-gray-800 bg-gray-900/50 shadow-lg">
+  <div id="graph-container" class="rounded-xl border border-gray-800 bg-gradient-to-b from-gray-900/80 to-gray-900/50 shadow-xl">
     <canvas id="graph-canvas"></canvas>
     <div id="commit-labels"></div>
   </div>
 
-  <div id="load-more-container" class="text-center py-8 hidden">
-    <button id="load-more-btn" class="px-5 py-2.5 text-sm bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-md transition-colors duration-150 border border-gray-700 hover:border-gray-600">
-      Load More
+  <div id="load-more-container" class="text-center py-6 hidden">
+    <button id="load-more-btn" class="px-6 py-2.5 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-all duration-150 border border-gray-700 hover:border-gray-600 hover:shadow-lg flex items-center gap-2 mx-auto">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      Load More Commits
     </button>
   </div>
 </div>
 
 <div id="detail-overlay" class="hidden fixed inset-0 z-50 flex justify-end">
-  <div id="detail-backdrop" class="absolute inset-0 bg-black/50"></div>
-  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900 border-l border-gray-700 overflow-y-auto shadow-2xl transform transition-transform duration-200 translate-x-full">
-    <div class="sticky top-0 bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-gray-100">Commit Detail</h2>
-      <button id="detail-close" class="text-gray-400 hover:text-gray-200 text-xl leading-none">&times;</button>
+  <div id="detail-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"></div>
+  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900/95 border-l border-gray-700/50 overflow-y-auto shadow-2xl transform transition-transform duration-300 ease-out translate-x-full">
+    <div class="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h2 class="text-lg font-semibold text-gray-100">Commit Details</h2>
+      </div>
+      <button id="detail-close" class="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all text-xl leading-none">&times;</button>
     </div>
-    <div id="detail-content" class="px-6 py-4">
+    <div id="detail-content" class="px-6 py-5">
       <p class="text-gray-500">Loading...</p>
     </div>
   </div>
@@ -65,11 +80,11 @@
 
 <script>
 const PER_PAGE = 200;
-const ROW_HEIGHT = 26;
-const GRAPH_LEFT = 8;
-const LANE_WIDTH = 16;
-const DOT_RADIUS = 3;
-const LABEL_OFFSET = 8;
+const ROW_HEIGHT = 28;
+const GRAPH_LEFT = 12;
+const LANE_WIDTH = 18;
+const DOT_RADIUS = 4;
+const LABEL_OFFSET = 10;
 
 let currentOffset = 0;
 let totalCommits = 0;
@@ -240,23 +255,20 @@ function renderGraph(commits, branches, append) {
           }
 
           ctx.strokeStyle = color;
-          ctx.lineWidth = isMerge ? 1.5 : 1;
-          ctx.globalAlpha = isMerge ? 0.6 : 0.35;
+          ctx.lineWidth = isMerge ? 2 : 1.5;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.globalAlpha = isMerge ? 0.75 : 0.5;
           ctx.beginPath();
 
-          if (isCrossLane) {
-            const startY = pos.y + DOT_RADIUS;
-            const endY = parentPos.y - DOT_RADIUS;
-            const midY = startY + (endY - startY) / 2;
+          const startY = pos.y + DOT_RADIUS + 1;
+          const endY = parentPos.y - DOT_RADIUS - 1;
+          const midY = startY + (endY - startY) / 2;
 
-            ctx.moveTo(pos.x, startY);
-            ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
-          } else {
-            const startY = pos.y + DOT_RADIUS;
-            const endY = parentPos.y - DOT_RADIUS;
-            ctx.moveTo(pos.x, startY);
-            ctx.lineTo(parentPos.x, endY);
-          }
+          // Always use bezier curves for smooth, rounded connections
+          ctx.moveTo(pos.x, startY);
+          ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
+
           ctx.stroke();
           ctx.globalAlpha = 1.0;
         }
@@ -271,23 +283,49 @@ function renderGraph(commits, branches, append) {
     const color = laneColors[pos.lane] || '#9ca3af';
     const isMerge = c.parents && c.parents.length > 1;
 
+    // Draw outer glow/halo for all commits
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, DOT_RADIUS + 2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.15;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+
     if (isMerge) {
+      // Merge commit: double ring with larger outer ring
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS + 1.5, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, DOT_RADIUS + 2.5, 0, Math.PI * 2);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
       ctx.stroke();
       ctx.globalAlpha = 1.0;
 
+      // Inner ring
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS - 0.5, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Center fill
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
       ctx.fillStyle = color;
+      ctx.globalAlpha = 0.4;
       ctx.fill();
+      ctx.globalAlpha = 1.0;
     } else {
+      // Regular commit: solid dot with subtle gradient effect
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = color;
+      ctx.fill();
+
+      // Subtle highlight
+      ctx.beginPath();
+      ctx.arc(pos.x - 1, pos.y - 1, DOT_RADIUS / 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
       ctx.fill();
     }
   }
@@ -308,18 +346,31 @@ function renderGraph(commits, branches, append) {
     label.style.maxWidth = (labelWidth - 8) + 'px';
     label.dataset.hash = c.hash;
 
-    let branchPill = '';
+    let labelPills = '';
+
+    // Branch labels - pill shaped with colored backgrounds
     if (branchHeads[c.hash]) {
       const branchName = branchHeads[c.hash];
       const bColor = getBranchColor(branchName);
-      branchPill = '<span class="inline-flex items-center px-1 py-px rounded text-[10px] font-medium mr-1 flex-shrink-0" style="background-color: ' + bColor + '20; color: ' + bColor + ';">' + escapeHtml(branchName) + '</span>';
+      labelPills += '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold mr-1.5 flex-shrink-0 shadow-sm" style="background-color: ' + bColor + '25; color: ' + bColor + '; border: 1px solid ' + bColor + '40;">' +
+        '<span class="w-1.5 h-1.5 rounded-full mr-1.5" style="background-color: ' + bColor + ';"></span>' +
+        escapeHtml(branchName) + '</span>';
+    }
+
+    // Tag labels - distinct styling (outlined, different shape)
+    if (c.tags && c.tags.length > 0) {
+      c.tags.forEach(tag => {
+        labelPills += '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium mr-1.5 flex-shrink-0 bg-gray-800 text-amber-400 border border-amber-500/30">' +
+          '<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3v5h8l-3.5 3.5 3.5 3.5H7v5H5V3h2z"/></svg>' +
+          escapeHtml(tag) + '</span>';
+      });
     }
 
     label.innerHTML =
-      branchPill +
-      '<span class="font-mono text-[10px] text-amber-600 w-12 flex-shrink-0">' + escapeHtml(c.shortHash) + '</span>' +
-      '<span class="commit-msg text-xs text-gray-400 flex-1 truncate transition-colors">' + escapeHtml(c.message) + '</span>' +
-      '<span class="text-[10px] text-gray-600 w-14 flex-shrink-0 text-right hidden sm:block">' + relativeDate(c.date) + '</span>';
+      labelPills +
+      '<span class="font-mono text-[11px] text-gray-500 w-14 flex-shrink-0 tracking-tight">' + escapeHtml(c.shortHash) + '</span>' +
+      '<span class="commit-msg text-[13px] text-gray-300 flex-1 truncate transition-colors ml-2">' + escapeHtml(c.message) + '</span>' +
+      '<span class="text-[11px] text-gray-600 w-16 flex-shrink-0 text-right hidden sm:block">' + relativeDate(c.date) + '</span>';
 
     label.addEventListener('click', () => showCommitDetail(c.hash));
     labelsContainer.appendChild(label);
@@ -416,13 +467,13 @@ async function loadStatus() {
     const data = await resp.json();
     currentBranch = data.currentBranch || '(detached HEAD)';
     const statusDot = data.hasUncommitted
-      ? '<span class="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1" title="Uncommitted changes"></span>'
-      : '<span class="inline-block w-2 h-2 rounded-full bg-green-500 mr-1" title="Clean working tree"></span>';
+      ? '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 text-xs font-medium border border-yellow-500/20" title="Uncommitted changes"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>modified</span>'
+      : '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 text-xs font-medium border border-green-500/20" title="Clean working tree"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>clean</span>';
     document.getElementById('branch-indicator').innerHTML =
-      statusDot + '<span class="font-mono text-gray-200">' + currentBranch + '</span>';
+      statusDot + '<span class="font-mono text-xs text-gray-300 bg-gray-800 px-2 py-0.5 rounded-md border border-gray-700">' + currentBranch + '</span>';
   } catch (err) {
     document.getElementById('branch-indicator').innerHTML =
-      '<span class="text-red-400">Error loading status</span>';
+      '<span class="text-red-400 text-xs">Error loading status</span>';
   }
 }
 
@@ -469,21 +520,23 @@ function showCommitDetail(hash) {
         return;
       }
       let html = '';
-      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Hash</span><p class="font-mono text-sm text-amber-500 break-all mt-1">' + data.hash + '</p></div>';
-      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Message</span><p class="text-sm text-gray-200 mt-1 whitespace-pre-wrap">' + data.message + '</p></div>';
-      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Author</span><p class="text-sm text-gray-200 mt-1">' + data.author + '</p></div>';
-      html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Date</span><p class="text-sm text-gray-200 mt-1">' + data.date + '</p></div>';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Commit Hash</span><p class="font-mono text-sm text-amber-500 break-all mt-1.5 bg-gray-800/50 px-3 py-2 rounded-lg border border-gray-700/50">' + data.hash + '</p></div>';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Message</span><p class="text-sm text-gray-200 mt-1.5 whitespace-pre-wrap bg-gray-800/30 px-3 py-2 rounded-lg border border-gray-800/50">' + data.message + '</p></div>';
+      html += '<div class="grid grid-cols-2 gap-4 mb-5">';
+      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Author</span><p class="text-sm text-gray-200 mt-1.5">' + data.author + '</p></div>';
+      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Date</span><p class="text-sm text-gray-200 mt-1.5">' + data.date + '</p></div>';
+      html += '</div>';
 
       if (data.files && data.files.length > 0) {
-        html += '<div class="mb-4"><span class="text-xs text-gray-500 uppercase tracking-wider">Files Changed (' + data.files.length + ')</span></div>';
-        html += '<div class="border border-gray-800 rounded overflow-hidden">';
+        html += '<div class="mb-3"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Files Changed</span><span class="ml-2 px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 text-xs">' + data.files.length + '</span></div>';
+        html += '<div class="border border-gray-800 rounded-lg overflow-hidden bg-gray-800/20">';
         data.files.forEach(f => {
-          html += '<div class="flex items-center justify-between px-3 py-2 border-b border-gray-800 last:border-b-0 text-sm">';
-          html += '<span class="text-gray-300 font-mono text-xs truncate mr-2">' + f.path + '</span>';
-          html += '<span class="flex items-center gap-2 flex-shrink-0 text-xs">';
-          if (f.additions > 0) html += '<span class="text-green-400">+' + f.additions + '</span>';
-          if (f.deletions > 0) html += '<span class="text-red-400">-' + f.deletions + '</span>';
-          if (f.additions === 0 && f.deletions === 0) html += '<span class="text-gray-500">Bin</span>';
+          html += '<div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 last:border-b-0 text-sm hover:bg-gray-800/40 transition-colors">';
+          html += '<span class="text-gray-300 font-mono text-xs truncate mr-3">' + f.path + '</span>';
+          html += '<span class="flex items-center gap-2 flex-shrink-0 text-xs font-medium">';
+          if (f.additions > 0) html += '<span class="text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">+' + f.additions + '</span>';
+          if (f.deletions > 0) html += '<span class="text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">-' + f.deletions + '</span>';
+          if (f.additions === 0 && f.deletions === 0) html += '<span class="text-gray-500">Binary</span>';
           html += '</span></div>';
         });
         html += '</div>';
