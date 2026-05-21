@@ -237,9 +237,9 @@ func parseCommits(input string) []Commit {
 }
 
 var branchColors = []string{
-	"#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4",
-	"#3b82f6", "#8b5cf6", "#ec4899", "#f43f5e", "#84cc16",
-	"#14b8a6", "#6366f1", "#a855f7", "#d946ef", "#0ea5e9",
+	"#0085d9", "#d9008f", "#00d90a", "#d98500", "#a300d9",
+	"#ff0000", "#00d9cc", "#e138e8", "#85d900", "#dc5b23",
+	"#6f24d6", "#ffcc00",
 }
 
 func parseBranches(input string) []Branch {

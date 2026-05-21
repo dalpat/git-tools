@@ -329,7 +329,8 @@ const ctx = canvas.getContext('2d');
 const container = document.getElementById('graph-container');
 const labelsContainer = document.getElementById('commit-labels');
 
-const BRANCH_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
+// Neo-git-graph inspired palette (original Git Graph colours)
+const BRANCH_COLORS = ['#0085d9','#d9008f','#00d90a','#d98500','#a300d9','#ff0000','#00d9cc','#e138e8','#85d900','#dc5b23','#6f24d6','#ffcc00'];
 
 function getTheme() {
   return document.documentElement.getAttribute('data-theme') || 'dark';
@@ -511,6 +512,10 @@ function renderGraph(commits, branches, tags, append) {
     commitPositions[i] = { x, y, hash: allCommits[i].hash, shortHash: allCommits[i].shortHash, lane };
   }
 
+  // Draw branch lines (neo-git-graph style: pronounced bezier curves, shadow/outline)
+  const curveD = ROW_HEIGHT * 0.8;
+  const bgStroke = isLight() ? '#ffffff' : '#111827';
+
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
     const pos = commitPositions[i];
@@ -521,7 +526,6 @@ function renderGraph(commits, branches, tags, append) {
         const parentIdx = allCommits.findIndex(p => p.hash === parentHash);
         if (parentIdx !== -1 && parentIdx > i) {
           const parentPos = commitPositions[parentIdx];
-          const isMerge = c.parents.length > 1;
 
           let color;
           if (p === 0) {
@@ -530,73 +534,50 @@ function renderGraph(commits, branches, tags, append) {
             color = laneColors[parentPos.lane] || '#9ca3af';
           }
 
-          ctx.strokeStyle = color;
-          ctx.lineWidth = isMerge ? 2 : 1.5;
+          // Shadow/outline (shaddow) — matches neo-git-graph's 4px background stroke
+          ctx.strokeStyle = bgStroke;
+          ctx.lineWidth = 4;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.globalAlpha = isMerge ? t.mergeAlpha : t.lineAlpha;
+          ctx.globalAlpha = 0.75;
           ctx.beginPath();
-
-          const startY = pos.y + DOT_RADIUS + 1;
-          const endY = parentPos.y - DOT_RADIUS - 1;
-          const midY = startY + (endY - startY) / 2;
-
-          ctx.moveTo(pos.x, startY);
-          ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
-
+          ctx.moveTo(pos.x, pos.y);
+          ctx.bezierCurveTo(pos.x, pos.y + curveD, parentPos.x, parentPos.y - curveD, parentPos.x, parentPos.y);
           ctx.stroke();
+
+          // Actual branch line — 2px width, solid color
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
           ctx.globalAlpha = 1.0;
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y);
+          ctx.bezierCurveTo(pos.x, pos.y + curveD, parentPos.x, parentPos.y - curveD, parentPos.x, parentPos.y);
+          ctx.stroke();
         }
       }
     }
   }
 
+  // Draw commit dots (neo-git-graph style: clean 4px circles with background outline)
   for (let i = 0; i < allCommits.length; i++) {
     const c = allCommits[i];
     const pos = commitPositions[i];
-
     const color = laneColors[pos.lane] || '#9ca3af';
-    const isMerge = c.parents && c.parents.length > 1;
 
+    // Background outline (matches neo's circle stroke)
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, DOT_RADIUS + 2, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+    ctx.strokeStyle = bgStroke;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.75;
+    ctx.stroke();
+
+    // Fill
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.globalAlpha = t.dotHaloAlpha;
-    ctx.fill();
     ctx.globalAlpha = 1.0;
-
-    if (isMerge) {
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS + 2.5, 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = isLight() ? 0.5 : 0.6;
-      ctx.stroke();
-      ctx.globalAlpha = 1.0;
-
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = t.dotCenterAlpha;
-      ctx.fill();
-      ctx.globalAlpha = 1.0;
-    } else {
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(pos.x - 1, pos.y - 1, DOT_RADIUS / 2, 0, Math.PI * 2);
-      ctx.fillStyle = isLight() ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.3)';
-      ctx.fill();
-    }
+    ctx.fill();
   }
 
   labelsContainer.innerHTML = '';
