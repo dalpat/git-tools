@@ -168,6 +168,9 @@ kill $(cat /tmp/think-git-graph.pid)
 | Flag | Description |
 |------|-------------|
 | `--detach` | Run server in background with PID file |
+| `--port` | Port to listen on (default: random) |
+| `--host` | Host to bind to (default: 127.0.0.1) |
+| `--no-open` | Do not open browser automatically |
 | `-h, --help` | Show help |
 
 ### Features
@@ -179,7 +182,8 @@ kill $(cat /tmp/think-git-graph.pid)
 - **Current branch indicator** — green dot (clean) or yellow dot (uncommitted changes)
 - **Pagination** — loads 200 commits by default, "Load More" button fetches older commits
 - **Refresh button** — manually update the graph after making changes in another terminal
-- **Dark theme** — clean, minimal dark UI with amber accents
+- **Dark & light themes** — clean, minimal UI with amber accents; respects system preference
+- **Auto-refresh** — graph updates automatically when git changes are detected
 - **Zero runtime dependencies** — single compiled Go binary, no npm, no node_modules
 - **`--detach` mode** — runs in background with PID file, parent waits for URL then exits
 
@@ -192,6 +196,15 @@ think-git-graph
 
 # Background mode — returns immediately, browser opens automatically
 think-git-graph --detach
+
+# Run on a fixed port (so you can bookmark it)
+think-git-graph --port 8080
+
+# Run without auto-opening the browser (useful in SSH/headless/WSL)
+think-git-graph --no-open
+
+# Combine flags for background + fixed port
+think-git-graph --detach --port 8080 --host 0.0.0.0
 
 # View the listening URL
 cat /tmp/think-git-graph.url
