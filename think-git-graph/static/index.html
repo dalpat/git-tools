@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,45 +9,250 @@
 <title>think-git-graph</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
-  #graph-container { position: relative; overflow-y: auto; max-height: calc(100vh - 180px); border-radius: 12px; }
+  /* Theme-aware CSS variables */
+  :root {
+    --bg-body: #030712;
+    --bg-card: #111827;
+    --bg-card-gradient-start: rgba(17,24,39,0.8);
+    --bg-card-gradient-end: rgba(17,24,39,0.5);
+    --bg-hover: #1f2937;
+    --bg-pill: #1f2937;
+    --bg-pill-hover: #374151;
+    --bg-badge: #1f2937;
+    --bg-input: #1f2937;
+    --bg-panel: rgba(17,24,39,0.95);
+    --bg-backdrop: rgba(0,0,0,0.6);
+    --bg-scrollbar-track: #111827;
+    --bg-scrollbar-thumb: #374151;
+    --bg-scrollbar-thumb-hover: #4b5563;
+    --bg-commit-detail: rgba(31,41,55,0.5);
+    --bg-commit-detail-hover: rgba(31,41,55,0.4);
+    --bg-file-add: rgba(74,222,128,0.1);
+    --bg-file-del: rgba(248,113,113,0.1);
+    --text-primary: #f9fafb;
+    --text-secondary: #e5e7eb;
+    --text-muted: #9ca3af;
+    --text-dim: #6b7280;
+    --text-hash: #f59e0b;
+    --border-color: #1f2937;
+    --border-light: #374151;
+    --border-detail: rgba(55,65,81,0.5);
+    --shadow-color: rgba(0,0,0,0.3);
+    --commit-label-hover-bg: rgba(55,65,81,0.6);
+    --commit-msg-hover: #fbbf24;
+    --branch-badge-bg: rgba(31,41,55,0.5);
+    --tag-bg: #1f2937;
+    --tag-border: rgba(245,158,11,0.3);
+    --tag-text: #fbbf24;
+    --status-dot-clean: #22c55e;
+    --status-dot-dirty: #eab308;
+    --ahead-text: #4ade80;
+    --behind-text: #f87171;
+    --remote-ahead-text: #60a5fa;
+    --remote-behind-text: #fb923c;
+    --error-text: #f87171;
+    --graph-line-alpha: 0.5;
+    --graph-merge-alpha: 0.75;
+    --graph-dot-halo-alpha: 0.15;
+    --graph-dot-center-alpha: 0.4;
+    --graph-highlight-alpha: 0.3;
+  }
+
+  [data-theme="light"] {
+    --bg-body: #f8fafc;
+    --bg-card: #ffffff;
+    --bg-card-gradient-start: rgba(255,255,255,0.95);
+    --bg-card-gradient-end: rgba(248,250,252,0.9);
+    --bg-hover: #f1f5f9;
+    --bg-pill: #e2e8f0;
+    --bg-pill-hover: #cbd5e1;
+    --bg-badge: #f1f5f9;
+    --bg-input: #f1f5f9;
+    --bg-panel: rgba(255,255,255,0.98);
+    --bg-backdrop: rgba(15,23,42,0.4);
+    --bg-scrollbar-track: #e2e8f0;
+    --bg-scrollbar-thumb: #94a3b8;
+    --bg-scrollbar-thumb-hover: #64748b;
+    --bg-commit-detail: rgba(241,245,249,0.5);
+    --bg-commit-detail-hover: rgba(241,245,249,0.4);
+    --bg-file-add: rgba(34,197,94,0.1);
+    --bg-file-del: rgba(239,68,68,0.1);
+    --text-primary: #0f172a;
+    --text-secondary: #1e293b;
+    --text-muted: #475569;
+    --text-dim: #94a3b8;
+    --text-hash: #d97706;
+    --border-color: #e2e8f0;
+    --border-light: #cbd5e1;
+    --border-detail: rgba(203,213,225,0.5);
+    --shadow-color: rgba(15,23,42,0.08);
+    --commit-label-hover-bg: rgba(226,232,240,0.6);
+    --commit-msg-hover: #b45309;
+    --branch-badge-bg: rgba(241,245,249,0.8);
+    --tag-bg: #fef3c7;
+    --tag-border: rgba(217,119,6,0.3);
+    --tag-text: #b45309;
+    --status-dot-clean: #16a34a;
+    --status-dot-dirty: #ca8a04;
+    --ahead-text: #16a34a;
+    --behind-text: #dc2626;
+    --remote-ahead-text: #2563eb;
+    --remote-behind-text: #ea580c;
+    --error-text: #dc2626;
+    --graph-line-alpha: 0.4;
+    --graph-merge-alpha: 0.65;
+    --graph-dot-halo-alpha: 0.12;
+    --graph-dot-center-alpha: 0.35;
+    --graph-highlight-alpha: 0.25;
+  }
+
+  body {
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+  }
+
+  #graph-container {
+    position: relative;
+    overflow-y: auto;
+    max-height: calc(100vh - 180px);
+    border-radius: 12px;
+    background: linear-gradient(to bottom, var(--bg-card-gradient-start), var(--bg-card-gradient-end));
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px -1px var(--shadow-color);
+  }
+
   #graph-canvas { display: block; cursor: pointer; }
   #commit-labels { position: absolute; top: 0; pointer-events: none; }
-  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; border-radius: 6px; transition: all 0.15s ease; }
-  .commit-label:hover { background-color: rgba(55, 65, 81, 0.6); transform: translateX(2px); }
-  .commit-label:hover .commit-msg { color: #fbbf24; }
+  .commit-label {
+    position: absolute;
+    white-space: nowrap;
+    pointer-events: auto;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+  }
+  .commit-label:hover {
+    background-color: var(--commit-label-hover-bg);
+    transform: translateX(2px);
+  }
+  .commit-label:hover .commit-msg {
+    color: var(--commit-msg-hover);
+  }
+
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .spin { animation: spin 1s linear infinite; }
   #refresh-btn:disabled { opacity: 0.3; cursor: not-allowed; }
   #load-more-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-  /* Custom scrollbar for dark theme */
+
+  /* Custom scrollbar */
   #graph-container::-webkit-scrollbar { width: 8px; height: 8px; }
-  #graph-container::-webkit-scrollbar-track { background: #111827; border-radius: 4px; }
-  #graph-container::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
-  #graph-container::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+  #graph-container::-webkit-scrollbar-track { background: var(--bg-scrollbar-track); border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb { background: var(--bg-scrollbar-thumb); border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb:hover { background: var(--bg-scrollbar-thumb-hover); }
+
+  /* Theme toggle button */
+  #theme-toggle { transition: all 0.2s ease; }
+  #theme-toggle:hover { transform: scale(1.1); }
+
+  /* Detail panel theming */
+  #detail-panel {
+    background: var(--bg-panel);
+    border-left-color: var(--border-light);
+  }
+  #detail-panel .sticky-header {
+    background: var(--bg-panel);
+    border-bottom-color: var(--border-color);
+  }
+
+  /* Load more button theming */
+  #load-more-btn {
+    background: var(--bg-pill);
+    color: var(--text-muted);
+    border-color: var(--border-light);
+  }
+  #load-more-btn:hover {
+    background: var(--bg-pill-hover);
+    border-color: var(--border-light);
+  }
+
+  /* Commit hash in detail panel */
+  .commit-hash-box {
+    background: var(--bg-commit-detail);
+    border-color: var(--border-detail);
+    color: var(--text-hash);
+  }
+  .commit-message-box {
+    background: var(--bg-commit-detail);
+    border-color: var(--border-color);
+  }
+  .file-list-container {
+    background: var(--bg-commit-detail);
+    border-color: var(--border-color);
+  }
+  .file-list-item:hover {
+    background: var(--bg-commit-detail-hover);
+  }
+  .file-addition-bg {
+    background: var(--bg-file-add);
+    color: #16a34a;
+  }
+  .file-deletion-bg {
+    background: var(--bg-file-del);
+    color: #dc2626;
+  }
+  [data-theme="light"] .file-addition-bg { color: #15803d; }
+  [data-theme="light"] .file-deletion-bg { color: #b91c1c; }
+
+  /* Tag pills */
+  .tag-pill {
+    background: var(--tag-bg);
+    color: var(--tag-text);
+    border-color: var(--tag-border);
+  }
+
+  /* Status indicators */
+  .status-clean { background: rgba(34,197,94,0.1); color: #22c55e; border-color: rgba(34,197,94,0.2); }
+  .status-dirty { background: rgba(234,179,8,0.1); color: #eab308; border-color: rgba(234,179,8,0.2); }
+  [data-theme="light"] .status-clean { background: rgba(22,163,74,0.1); color: #16a34a; border-color: rgba(22,163,74,0.2); }
+  [data-theme="light"] .status-dirty { background: rgba(202,138,4,0.1); color: #ca8a04; border-color: rgba(202,138,4,0.2); }
+
+  /* Branch indicator */
+  .branch-badge {
+    background: var(--bg-badge);
+    border-color: var(--border-light);
+  }
+  .ahead-behind-badge {
+    background: var(--branch-badge-bg);
+    border-color: var(--border-detail);
+  }
 </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+<body class="min-h-screen font-sans antialiased">
 <div class="max-w-7xl mx-auto px-6 py-6">
-  <header class="flex items-center justify-between mb-6 pb-3 border-b border-gray-800">
+  <header class="flex items-center justify-between mb-6 pb-3" style="border-bottom: 1px solid var(--border-color);">
     <div class="flex items-center gap-3">
       <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
         <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
         </svg>
       </div>
-      <h1 class="text-xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
-      <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium"></span>
-      <span id="tag-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-amber-400 font-medium hidden"></span>
+      <h1 class="text-xl font-semibold tracking-tight" style="color: var(--text-primary);">think-git-graph</h1>
+      <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full font-medium" style="background: var(--bg-badge); color: var(--text-muted);"></span>
+      <span id="tag-count" class="text-xs px-2 py-0.5 rounded-full font-medium hidden" style="background: var(--bg-badge); color: var(--text-hash);"></span>
     </div>
     <div class="flex items-center gap-3">
-      <div id="auto-refresh-indicator" class="hidden items-center gap-1.5 text-xs text-gray-500" title="Auto-refresh enabled">
+      <button id="theme-toggle" class="p-2 rounded-lg transition-all duration-150" style="color: var(--text-muted);" title="Toggle theme">
+        <svg id="theme-icon-dark" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+        <svg id="theme-icon-light" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+      </button>
+      <div id="auto-refresh-indicator" class="hidden items-center gap-1.5 text-xs" style="color: var(--text-dim);" title="Auto-refresh enabled">
         <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
         <span>auto</span>
       </div>
       <div id="branch-indicator" class="flex items-center gap-2 text-sm">
-        <span class="animate-pulse text-gray-400">Loading...</span>
+        <span class="animate-pulse" style="color: var(--text-muted);">Loading...</span>
       </div>
-      <button id="refresh-btn" class="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all duration-150" title="Refresh">
+      <button id="refresh-btn" class="p-2 rounded-lg transition-all duration-150" style="color: var(--text-muted);" title="Refresh">
         <svg id="refresh-icon" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
         </svg>
@@ -55,13 +260,13 @@
     </div>
   </header>
 
-  <div id="graph-container" class="rounded-xl border border-gray-800 bg-gradient-to-b from-gray-900/80 to-gray-900/50 shadow-xl">
+  <div id="graph-container">
     <canvas id="graph-canvas"></canvas>
     <div id="commit-labels"></div>
   </div>
 
   <div id="load-more-container" class="text-center py-6 hidden">
-    <button id="load-more-btn" class="px-6 py-2.5 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-all duration-150 border border-gray-700 hover:border-gray-600 hover:shadow-lg flex items-center gap-2 mx-auto">
+    <button id="load-more-btn" class="px-6 py-2.5 text-sm font-medium rounded-lg transition-all duration-150 hover:shadow-lg flex items-center gap-2 mx-auto">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       Load More Commits
     </button>
@@ -69,19 +274,19 @@
 </div>
 
 <div id="detail-overlay" class="hidden fixed inset-0 z-50 flex justify-end">
-  <div id="detail-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"></div>
-  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900/95 border-l border-gray-700/50 overflow-y-auto shadow-2xl transform transition-transform duration-300 ease-out translate-x-full">
-    <div class="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+  <div id="detail-backdrop" class="absolute inset-0 backdrop-blur-sm transition-opacity" style="background: var(--bg-backdrop);"></div>
+  <div id="detail-panel" class="relative w-full max-w-lg overflow-y-auto shadow-2xl transform transition-transform duration-300 ease-out translate-x-full border-l">
+    <div class="sticky-header sticky top-0 backdrop-blur px-6 py-4 flex items-center justify-between" style="border-bottom: 1px solid var(--border-color);">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
           <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
-        <h2 class="text-lg font-semibold text-gray-100">Commit Details</h2>
+        <h2 class="text-lg font-semibold" style="color: var(--text-primary);">Commit Details</h2>
       </div>
-      <button id="detail-close" class="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all text-xl leading-none">&times;</button>
+      <button id="detail-close" class="p-1.5 rounded-lg transition-all text-xl leading-none" style="color: var(--text-muted);">&times;</button>
     </div>
     <div id="detail-content" class="px-6 py-5">
-      <p class="text-gray-500">Loading...</p>
+      <p style="color: var(--text-muted);">Loading...</p>
     </div>
   </div>
 </div>
@@ -112,6 +317,39 @@ const labelsContainer = document.getElementById('commit-labels');
 
 const BRANCH_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
 
+function getTheme() {
+  return document.documentElement.getAttribute('data-theme') || 'dark';
+}
+
+function isLight() {
+  return getTheme() === 'light';
+}
+
+function getThemeColors() {
+  const light = isLight();
+  return {
+    lineAlpha: light ? 0.4 : 0.5,
+    mergeAlpha: light ? 0.65 : 0.75,
+    dotHaloAlpha: light ? 0.12 : 0.15,
+    dotCenterAlpha: light ? 0.35 : 0.4,
+    highlightAlpha: light ? 0.25 : 0.3,
+    labelHoverBg: light ? 'rgba(226,232,240,0.6)' : 'rgba(55,65,81,0.6)',
+    hashColor: light ? '#d97706' : '#f59e0b',
+    textPrimary: light ? '#0f172a' : '#f9fafb',
+    textSecondary: light ? '#1e293b' : '#e5e7eb',
+    textMuted: light ? '#475569' : '#9ca3af',
+    textDim: light ? '#94a3b8' : '#6b7280',
+    bgCard: light ? '#ffffff' : '#111827',
+    bgPill: light ? '#e2e8f0' : '#1f2937',
+    bgBadge: light ? '#f1f5f9' : '#1f2937',
+    borderColor: light ? '#e2e8f0' : '#1f2937',
+    tagBg: light ? '#fef3c7' : '#1f2937',
+    tagBorder: light ? 'rgba(217,119,6,0.3)' : 'rgba(245,158,11,0.3)',
+    tagText: light ? '#b45309' : '#fbbf24',
+    errorText: light ? '#dc2626' : '#f87171'
+  };
+}
+
 function getBranchColor(branch) {
   if (!branchColorMap[branch]) {
     const idx = Object.keys(branchColorMap).length % BRANCH_COLORS.length;
@@ -121,7 +359,7 @@ function getBranchColor(branch) {
 }
 
 function assignLanes(commits, branches, existingLaneMap, append) {
-  const laneMap = {}; // hash -> lane (pre-assigned by children)
+  const laneMap = {};
   const laneColorMap = {};
   let nextLane = 0;
 
@@ -139,11 +377,9 @@ function assignLanes(commits, branches, existingLaneMap, append) {
     const c = commits[i];
     let lane;
 
-    // If a child already assigned us a lane, use it
     if (laneMap[c.hash] !== undefined) {
       lane = laneMap[c.hash];
     } else {
-      // Otherwise find the leftmost free lane
       const used = new Set(Object.values(laneMap));
       lane = 0;
       while (used.has(lane)) {
@@ -157,13 +393,11 @@ function assignLanes(commits, branches, existingLaneMap, append) {
     commitLane[i] = lane;
 
     if (c.parents && c.parents.length > 0) {
-      // First parent continues in this lane
       const firstParent = c.parents[0];
       if (laneMap[firstParent] === undefined) {
         laneMap[firstParent] = lane;
       }
 
-      // Other parents branch off to new lanes on the right
       for (let p = 1; p < c.parents.length; p++) {
         const parentHash = c.parents[p];
         if (laneMap[parentHash] === undefined) {
@@ -210,7 +444,6 @@ function renderGraph(commits, branches, tags, append) {
     allTags = tags || allTags;
   }
 
-  // Build commit -> tags mapping
   const commitTagsMap = {};
   for (const tag of allTags) {
     if (!commitTagsMap[tag.commitHash]) {
@@ -219,7 +452,6 @@ function renderGraph(commits, branches, tags, append) {
     commitTagsMap[tag.commitHash].push(tag.name);
   }
 
-  // Assign tags to commits
   for (const commit of allCommits) {
     commit.tags = commitTagsMap[commit.hash] || [];
   }
@@ -252,6 +484,8 @@ function renderGraph(commits, branches, tags, append) {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  const t = getThemeColors();
+
   for (let i = 0; i < allCommits.length; i++) {
     const lane = commitLane[i];
     const x = GRAPH_LEFT + (lane * actualLaneWidth) + (actualLaneWidth / 2);
@@ -270,7 +504,6 @@ function renderGraph(commits, branches, tags, append) {
         if (parentIdx !== -1 && parentIdx > i) {
           const parentPos = commitPositions[parentIdx];
           const isMerge = c.parents.length > 1;
-          const isCrossLane = pos.lane !== parentPos.lane;
 
           let color;
           if (p === 0) {
@@ -283,14 +516,13 @@ function renderGraph(commits, branches, tags, append) {
           ctx.lineWidth = isMerge ? 2 : 1.5;
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
-          ctx.globalAlpha = isMerge ? 0.75 : 0.5;
+          ctx.globalAlpha = isMerge ? t.mergeAlpha : t.lineAlpha;
           ctx.beginPath();
 
           const startY = pos.y + DOT_RADIUS + 1;
           const endY = parentPos.y - DOT_RADIUS - 1;
           const midY = startY + (endY - startY) / 2;
 
-          // Always use bezier curves for smooth, rounded connections
           ctx.moveTo(pos.x, startY);
           ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
 
@@ -308,49 +540,43 @@ function renderGraph(commits, branches, tags, append) {
     const color = laneColors[pos.lane] || '#9ca3af';
     const isMerge = c.parents && c.parents.length > 1;
 
-    // Draw outer glow/halo for all commits
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, DOT_RADIUS + 2, 0, Math.PI * 2);
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.15;
+    ctx.globalAlpha = t.dotHaloAlpha;
     ctx.fill();
     ctx.globalAlpha = 1.0;
 
     if (isMerge) {
-      // Merge commit: double ring with larger outer ring
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, DOT_RADIUS + 2.5, 0, Math.PI * 2);
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.6;
+      ctx.globalAlpha = isLight() ? 0.5 : 0.6;
       ctx.stroke();
       ctx.globalAlpha = 1.0;
 
-      // Inner ring
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Center fill
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.4;
+      ctx.globalAlpha = t.dotCenterAlpha;
       ctx.fill();
       ctx.globalAlpha = 1.0;
     } else {
-      // Regular commit: solid dot with subtle gradient effect
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
 
-      // Subtle highlight
       ctx.beginPath();
       ctx.arc(pos.x - 1, pos.y - 1, DOT_RADIUS / 2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fillStyle = isLight() ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.3)';
       ctx.fill();
     }
   }
@@ -373,7 +599,6 @@ function renderGraph(commits, branches, tags, append) {
 
     let labelPills = '';
 
-    // Branch labels - pill shaped with colored backgrounds
     if (branchHeads[c.hash]) {
       const branchName = branchHeads[c.hash];
       const bColor = getBranchColor(branchName);
@@ -382,20 +607,20 @@ function renderGraph(commits, branches, tags, append) {
         escapeHtml(branchName) + '</span>';
     }
 
-    // Tag labels - distinct styling (outlined, different shape)
     if (c.tags && c.tags.length > 0) {
       c.tags.forEach(tag => {
-        labelPills += '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium mr-1.5 flex-shrink-0 bg-gray-800 text-amber-400 border border-amber-500/30">' +
+        labelPills += '<span class="tag-pill inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium mr-1.5 flex-shrink-0 border">' +
           '<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3v5h8l-3.5 3.5 3.5 3.5H7v5H5V3h2z"/></svg>' +
           escapeHtml(tag) + '</span>';
       });
     }
 
+    const t = getThemeColors();
     label.innerHTML =
       labelPills +
-      '<span class="font-mono text-[11px] text-gray-500 w-14 flex-shrink-0 tracking-tight">' + escapeHtml(c.shortHash) + '</span>' +
-      '<span class="commit-msg text-[13px] text-gray-300 flex-1 truncate transition-colors ml-2">' + escapeHtml(c.message) + '</span>' +
-      '<span class="text-[11px] text-gray-600 w-16 flex-shrink-0 text-right hidden sm:block">' + relativeDate(c.date) + '</span>';
+      '<span class="font-mono text-[11px] w-14 flex-shrink-0 tracking-tight" style="color: ' + t.textDim + ';">' + escapeHtml(c.shortHash) + '</span>' +
+      '<span class="commit-msg text-[13px] flex-1 truncate transition-colors ml-2" style="color: ' + t.textSecondary + ';">' + escapeHtml(c.message) + '</span>' +
+      '<span class="text-[11px] w-16 flex-shrink-0 text-right hidden sm:block" style="color: ' + t.textDim + ';">' + relativeDate(c.date) + '</span>';
 
     label.addEventListener('click', () => showCommitDetail(c.hash));
     labelsContainer.appendChild(label);
@@ -475,8 +700,7 @@ async function loadGraph() {
     const data = await resp.json();
     totalCommits = data.total;
     document.getElementById('commit-count').textContent = totalCommits + ' commits';
-    
-    // Show tag count
+
     const tagCountEl = document.getElementById('tag-count');
     if (data.tags && data.tags.length > 0) {
       tagCountEl.textContent = data.tags.length + ' tags';
@@ -484,15 +708,16 @@ async function loadGraph() {
     } else {
       tagCountEl.classList.add('hidden');
     }
-    
+
     branchColorMap = {};
     if (data.branches) {
       data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
     }
     renderGraph(data.commits, data.branches, data.tags, false);
   } catch (err) {
+    const t = getThemeColors();
     document.getElementById('graph-container').innerHTML =
-       '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
+       '<p class="text-center py-20" style="color: ' + t.errorText + ';">Error loading commits.</p>';
   }
 }
 
@@ -502,49 +727,78 @@ async function loadStatus() {
     const data = await resp.json();
     currentBranch = data.currentBranch || '(detached HEAD)';
     const statusDot = data.hasUncommitted
-      ? '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 text-xs font-medium border border-yellow-500/20" title="Uncommitted changes"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>modified</span>'
-      : '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 text-xs font-medium border border-green-500/20" title="Clean working tree"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>clean</span>';
-    
-    // Build ahead/behind indicators
+      ? '<span class="status-dirty inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border" title="Uncommitted changes"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--status-dot-dirty);"></span>modified</span>'
+      : '<span class="status-clean inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium border" title="Clean working tree"><span class="w-1.5 h-1.5 rounded-full" style="background: var(--status-dot-clean);"></span>clean</span>';
+
     let aheadBehindHtml = '';
     if (data.branchStatus) {
       const bs = data.branchStatus;
       const parts = [];
-      
-      // Show ahead/behind vs main
+
       if (bs.aheadOfMain > 0 || bs.behindMain > 0) {
         if (bs.aheadOfMain > 0) {
-          parts.push('<span class="text-green-400" title="' + bs.aheadOfMain + ' commit(s) ahead of main">↑' + bs.aheadOfMain + '</span>');
+          parts.push('<span style="color: var(--ahead-text);" title="' + bs.aheadOfMain + ' commit(s) ahead of main">↑' + bs.aheadOfMain + '</span>');
         }
         if (bs.behindMain > 0) {
-          parts.push('<span class="text-red-400" title="' + bs.behindMain + ' commit(s) behind main">↓' + bs.behindMain + '</span>');
+          parts.push('<span style="color: var(--behind-text);" title="' + bs.behindMain + ' commit(s) behind main">↓' + bs.behindMain + '</span>');
         }
       }
-      
-      // Show ahead/behind vs remote if different from main comparison
+
       if (bs.remoteTracking && bs.remoteTracking !== 'origin/main' && bs.remoteTracking !== 'origin/master') {
         if (bs.aheadOfRemote > 0 || bs.behindRemote > 0) {
           if (bs.aheadOfRemote > 0) {
-            parts.push('<span class="text-blue-400 text-[10px]" title="' + bs.aheadOfRemote + ' commit(s) ahead of ' + bs.remoteTracking + '">↑' + bs.aheadOfRemote + '</span>');
+            parts.push('<span class="text-[10px]" style="color: var(--remote-ahead-text);" title="' + bs.aheadOfRemote + ' commit(s) ahead of ' + bs.remoteTracking + '">↑' + bs.aheadOfRemote + '</span>');
           }
           if (bs.behindRemote > 0) {
-            parts.push('<span class="text-orange-400 text-[10px]" title="' + bs.behindRemote + ' commit(s) behind ' + bs.remoteTracking + '">↓' + bs.behindRemote + '</span>');
+            parts.push('<span class="text-[10px]" style="color: var(--remote-behind-text);" title="' + bs.behindRemote + ' commit(s) behind ' + bs.remoteTracking + '">↓' + bs.behindRemote + '</span>');
           }
         }
       }
-      
+
       if (parts.length > 0) {
-        aheadBehindHtml = '<span class="flex items-center gap-1.5 text-xs font-mono bg-gray-800/50 px-1.5 py-0.5 rounded border border-gray-700/50">' + parts.join('') + '</span>';
+        aheadBehindHtml = '<span class="ahead-behind-badge flex items-center gap-1.5 text-xs font-mono px-1.5 py-0.5 rounded border">' + parts.join('') + '</span>';
       }
     }
-    
+
+    const t = getThemeColors();
     document.getElementById('branch-indicator').innerHTML =
-      statusDot + '<span class="font-mono text-xs text-gray-300 bg-gray-800 px-2 py-0.5 rounded-md border border-gray-700">' + currentBranch + '</span>' + aheadBehindHtml;
+      statusDot + '<span class="branch-badge font-mono text-xs px-2 py-0.5 rounded-md border" style="color: ' + t.textSecondary + ';">' + currentBranch + '</span>' + aheadBehindHtml;
   } catch (err) {
+    const t = getThemeColors();
     document.getElementById('branch-indicator').innerHTML =
-      '<span class="text-red-400 text-xs">Error loading status</span>';
+      '<span class="text-xs" style="color: ' + t.errorText + ';">Error loading status</span>';
   }
 }
+
+/* Theme Toggle */
+function initTheme() {
+  const saved = localStorage.getItem('think-git-graph-theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  setTheme(theme);
+}
+
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('think-git-graph-theme', theme);
+  updateThemeIcons(theme);
+  // Re-render graph to update canvas colors
+  if (allCommits.length > 0) {
+    renderGraph(allCommits, null, allTags, false);
+  }
+}
+
+function toggleTheme() {
+  const current = getTheme();
+  setTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+function updateThemeIcons(theme) {
+  document.getElementById('theme-icon-dark').classList.toggle('hidden', theme !== 'light');
+  document.getElementById('theme-icon-light').classList.toggle('hidden', theme !== 'dark');
+}
+
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
 document.getElementById('load-more-btn').addEventListener('click', loadMore);
 document.getElementById('refresh-btn').addEventListener('click', refresh);
@@ -569,6 +823,7 @@ async function refresh() {
   }
 }
 
+initTheme();
 loadStatus();
 loadGraph();
 
@@ -576,48 +831,49 @@ function showCommitDetail(hash) {
   const overlay = document.getElementById('detail-overlay');
   const content = document.getElementById('detail-content');
   const panel = document.getElementById('detail-panel');
+  const t = getThemeColors();
 
   overlay.classList.remove('hidden');
   panel.classList.remove('translate-x-full');
   panel.classList.add('translate-x-0');
-  content.innerHTML = '<p class="text-gray-500">Loading...</p>';
+  content.innerHTML = '<p style="color: ' + t.textMuted + ';">Loading...</p>';
 
   fetch('/commit/' + hash)
     .then(resp => resp.json())
     .then(data => {
       if (data.error) {
-        content.innerHTML = '<p class="text-red-400">Error: ' + data.error + '</p>';
+        content.innerHTML = '<p style="color: ' + t.errorText + ';">Error: ' + data.error + '</p>';
         return;
       }
       let html = '';
-      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Commit Hash</span><p class="font-mono text-sm text-amber-500 break-all mt-1.5 bg-gray-800/50 px-3 py-2 rounded-lg border border-gray-700/50">' + data.hash + '</p></div>';
-      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Message</span><p class="text-sm text-gray-200 mt-1.5 whitespace-pre-wrap bg-gray-800/30 px-3 py-2 rounded-lg border border-gray-800/50">' + data.message + '</p></div>';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ' + t.textDim + ';">Commit Hash</span><p class="commit-hash-box font-mono text-sm break-all mt-1.5 px-3 py-2 rounded-lg border">' + data.hash + '</p></div>';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ' + t.textDim + ';">Message</span><p class="commit-message-box text-sm mt-1.5 whitespace-pre-wrap px-3 py-2 rounded-lg border" style="color: ' + t.textSecondary + ';">' + data.message + '</p></div>';
       html += '<div class="grid grid-cols-2 gap-4 mb-5">';
-      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Author</span><p class="text-sm text-gray-200 mt-1.5">' + data.author + '</p></div>';
-      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Date</span><p class="text-sm text-gray-200 mt-1.5">' + data.date + '</p></div>';
+      html += '<div><span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ' + t.textDim + ';">Author</span><p class="text-sm mt-1.5" style="color: ' + t.textSecondary + ';">' + data.author + '</p></div>';
+      html += '<div><span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ' + t.textDim + ';">Date</span><p class="text-sm mt-1.5" style="color: ' + t.textSecondary + ';">' + data.date + '</p></div>';
       html += '</div>';
 
       if (data.files && data.files.length > 0) {
-        html += '<div class="mb-3"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Files Changed</span><span class="ml-2 px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 text-xs">' + data.files.length + '</span></div>';
-        html += '<div class="border border-gray-800 rounded-lg overflow-hidden bg-gray-800/20">';
+        html += '<div class="mb-3"><span class="text-[10px] font-semibold uppercase tracking-wider" style="color: ' + t.textDim + ';">Files Changed</span><span class="ml-2 px-2 py-0.5 rounded-full text-xs" style="background: var(--bg-badge); color: ' + t.textMuted + ';">' + data.files.length + '</span></div>';
+        html += '<div class="file-list-container rounded-lg overflow-hidden border">';
         data.files.forEach(f => {
-          html += '<div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 last:border-b-0 text-sm hover:bg-gray-800/40 transition-colors">';
-          html += '<span class="text-gray-300 font-mono text-xs truncate mr-3">' + f.path + '</span>';
+          html += '<div class="file-list-item flex items-center justify-between px-4 py-2.5 border-b last:border-b-0 text-sm transition-colors" style="border-color: var(--border-color);">';
+          html += '<span class="font-mono text-xs truncate mr-3" style="color: ' + t.textSecondary + ';">' + f.path + '</span>';
           html += '<span class="flex items-center gap-2 flex-shrink-0 text-xs font-medium">';
-          if (f.additions > 0) html += '<span class="text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">+' + f.additions + '</span>';
-          if (f.deletions > 0) html += '<span class="text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">-' + f.deletions + '</span>';
-          if (f.additions === 0 && f.deletions === 0) html += '<span class="text-gray-500">Binary</span>';
+          if (f.additions > 0) html += '<span class="file-addition-bg px-1.5 py-0.5 rounded">+' + f.additions + '</span>';
+          if (f.deletions > 0) html += '<span class="file-deletion-bg px-1.5 py-0.5 rounded">-' + f.deletions + '</span>';
+          if (f.additions === 0 && f.deletions === 0) html += '<span style="color: ' + t.textDim + ';">Binary</span>';
           html += '</span></div>';
         });
         html += '</div>';
       } else {
-        html += '<p class="text-sm text-gray-500">No files changed.</p>';
+        html += '<p class="text-sm" style="color: ' + t.textMuted + ';">No files changed.</p>';
       }
 
       content.innerHTML = html;
     })
     .catch(err => {
-      content.innerHTML = '<p class="text-red-400">Error loading commit detail.</p>';
+      content.innerHTML = '<p style="color: ' + t.errorText + ';">Error loading commit detail.</p>';
     });
 }
 
@@ -641,15 +897,13 @@ let eventSource = null;
 let reconnectTimeout = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
-const RECONNECT_DELAY_BASE = 1000; // Start with 1 second
+const RECONNECT_DELAY_BASE = 1000;
 
 function connectEventSource() {
-  // Close existing connection
   if (eventSource) {
     eventSource.close();
   }
 
-  // Don't reconnect if too many failed attempts
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     console.log('Auto-refresh: Max reconnection attempts reached');
     return;
@@ -664,7 +918,6 @@ function connectEventSource() {
   };
 
   eventSource.onmessage = function(event) {
-    // Handle any non-event messages (rarely used)
   };
 
   eventSource.addEventListener('connected', function(event) {
@@ -673,7 +926,6 @@ function connectEventSource() {
 
   eventSource.addEventListener('refresh', function(event) {
     console.log('Auto-refresh: Git changes detected, refreshing...');
-    // Trigger smooth refresh
     refresh();
   });
 
@@ -681,13 +933,12 @@ function connectEventSource() {
     console.log('Auto-refresh: Connection error');
     document.getElementById('auto-refresh-indicator').classList.add('hidden');
     document.getElementById('auto-refresh-indicator').classList.remove('flex');
-    
-    // Schedule reconnection with exponential backoff
+
     if (eventSource.readyState === EventSource.CLOSED) {
       reconnectAttempts++;
       const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts - 1);
       console.log('Auto-refresh: Reconnecting in ' + delay + 'ms (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')');
-      
+
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
@@ -696,10 +947,8 @@ function connectEventSource() {
   };
 }
 
-// Start auto-refresh connection
 connectEventSource();
 
-// Clean up on page unload
 window.addEventListener('beforeunload', function() {
   if (eventSource) {
     eventSource.close();
