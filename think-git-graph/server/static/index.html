@@ -1,529 +1,713 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>think-git-graph</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body {
-            background-color: #0f172a;
-            color: #e2e8f0;
-        }
-        .commit-row:hover {
-            background-color: #1e293b;
-        }
-        .commit-row.selected {
-            background-color: #334155;
-        }
-        .branch-label {
-            font-size: 0.65rem;
-            padding: 1px 4px;
-            border-radius: 2px;
-            margin-left: 4px;
-            white-space: nowrap;
-        }
-        .detail-panel {
-            transition: transform 0.2s ease;
-        }
-        .detail-panel.closed {
-            transform: translateX(100%);
-        }
-        #graph-canvas {
-            cursor: pointer;
-        }
-        .file-addition {
-            color: #4ade80;
-        }
-        .file-deletion {
-            color: #f87171;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-        }
-        .status-clean {
-            background-color: #22c55e;
-        }
-        .status-dirty {
-            background-color: #eab308;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>think-git-graph</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  #graph-container { position: relative; overflow-y: auto; max-height: calc(100vh - 180px); border-radius: 12px; }
+  #graph-canvas { display: block; cursor: pointer; }
+  #commit-labels { position: absolute; top: 0; pointer-events: none; }
+  .commit-label { position: absolute; white-space: nowrap; pointer-events: auto; cursor: pointer; border-radius: 6px; transition: all 0.15s ease; }
+  .commit-label:hover { background-color: rgba(55, 65, 81, 0.6); transform: translateX(2px); }
+  .commit-label:hover .commit-msg { color: #fbbf24; }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .spin { animation: spin 1s linear infinite; }
+  #refresh-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #load-more-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  /* Custom scrollbar for dark theme */
+  #graph-container::-webkit-scrollbar { width: 8px; height: 8px; }
+  #graph-container::-webkit-scrollbar-track { background: #111827; border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+  #graph-container::-webkit-scrollbar-thumb:hover { background: #4b5563; }
+</style>
 </head>
-<body class="h-screen flex flex-col overflow-hidden">
-    <!-- Header -->
-    <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between shrink-0">
-        <div class="flex items-center space-x-4">
-            <h1 class="text-lg font-semibold text-amber-400">think-git-graph</h1>
-            <div id="branch-indicator" class="flex items-center text-sm text-slate-300">
-                <span class="text-slate-500">Loading...</span>
-            </div>
-        </div>
-        <div class="flex items-center space-x-2">
-            <button id="refresh-btn" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs rounded transition-colors">
-                Refresh
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Content -->
-    <div class="flex flex-1 overflow-hidden">
-        <!-- Graph Area -->
-        <div class="flex-1 flex flex-col min-w-0">
-            <div class="flex-1 overflow-auto" id="graph-container">
-                <canvas id="graph-canvas" class="block"></canvas>
-            </div>
-            <!-- Load More -->
-            <div id="load-more-container" class="border-t border-slate-700 p-3 text-center hidden">
-                <button id="load-more-btn" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-sm rounded transition-colors">
-                    Load More
-                </button>
-                <span id="commit-count" class="ml-3 text-xs text-slate-500"></span>
-            </div>
-        </div>
-
-        <!-- Detail Panel -->
-        <div id="detail-panel" class="detail-panel closed w-96 bg-slate-800 border-l border-slate-700 flex flex-col shrink-0">
-            <div class="border-b border-slate-700 px-4 py-3 flex items-center justify-between">
-                <h2 class="text-sm font-semibold text-amber-400">Commit Details</h2>
-                <button id="close-detail" class="text-slate-400 hover:text-slate-200 text-lg">&times;</button>
-            </div>
-            <div id="detail-content" class="flex-1 overflow-auto p-4">
-                <p class="text-slate-500 text-sm">Click a commit to view details</p>
-            </div>
-        </div>
+<body class="bg-gray-950 text-gray-100 min-h-screen font-sans antialiased">
+<div class="max-w-7xl mx-auto px-6 py-6">
+  <header class="flex items-center justify-between mb-6 pb-3 border-b border-gray-800">
+    <div class="flex items-center gap-3">
+      <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600">
+        <svg class="w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      </div>
+      <h1 class="text-xl font-semibold tracking-tight text-gray-50">think-git-graph</h1>
+      <span id="commit-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 font-medium"></span>
+      <span id="tag-count" class="text-xs px-2 py-0.5 rounded-full bg-gray-800 text-amber-400 font-medium hidden"></span>
     </div>
+    <div class="flex items-center gap-3">
+      <div id="auto-refresh-indicator" class="hidden items-center gap-1.5 text-xs text-gray-500" title="Auto-refresh enabled">
+        <span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+        <span>auto</span>
+      </div>
+      <div id="branch-indicator" class="flex items-center gap-2 text-sm">
+        <span class="animate-pulse text-gray-400">Loading...</span>
+      </div>
+      <button id="refresh-btn" class="p-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all duration-150" title="Refresh">
+        <svg id="refresh-icon" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+      </button>
+    </div>
+  </header>
 
-    <script>
-        const CONFIG = {
-            commitHeight: 40,
-            laneWidth: 16,
-            dotRadius: 5,
-            mergeDotRadius: 7,
-            lineWidth: 2,
-            leftPadding: 80,
-            rightPadding: 20,
-            defaultLimit: 200
-        };
+  <div id="graph-container" class="rounded-xl border border-gray-800 bg-gradient-to-b from-gray-900/80 to-gray-900/50 shadow-xl">
+    <canvas id="graph-canvas"></canvas>
+    <div id="commit-labels"></div>
+  </div>
 
-        let state = {
-            commits: [],
-            branches: [],
-            currentBranch: '',
-            hasUncommitted: false,
-            total: 0,
-            offset: 0,
-            selectedHash: null,
-            commitPositions: new Map(),
-            laneCount: 0
-        };
+  <div id="load-more-container" class="text-center py-6 hidden">
+    <button id="load-more-btn" class="px-6 py-2.5 text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-all duration-150 border border-gray-700 hover:border-gray-600 hover:shadow-lg flex items-center gap-2 mx-auto">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      Load More Commits
+    </button>
+  </div>
+</div>
 
-        const canvas = document.getElementById('graph-canvas');
-        const ctx = canvas.getContext('2d');
-        const container = document.getElementById('graph-container');
+<div id="detail-overlay" class="hidden fixed inset-0 z-50 flex justify-end">
+  <div id="detail-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"></div>
+  <div id="detail-panel" class="relative w-full max-w-lg bg-gray-900/95 border-l border-gray-700/50 overflow-y-auto shadow-2xl transform transition-transform duration-300 ease-out translate-x-full">
+    <div class="sticky top-0 bg-gray-900/95 backdrop-blur border-b border-gray-800 px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h2 class="text-lg font-semibold text-gray-100">Commit Details</h2>
+      </div>
+      <button id="detail-close" class="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-gray-800 rounded-lg transition-all text-xl leading-none">&times;</button>
+    </div>
+    <div id="detail-content" class="px-6 py-5">
+      <p class="text-gray-500">Loading...</p>
+    </div>
+  </div>
+</div>
 
-        // Initialize
-        async function init() {
-            await loadStatus();
-            await loadGraph();
-            setupEventListeners();
+<script>
+const PER_PAGE = 200;
+const ROW_HEIGHT = 28;
+const GRAPH_LEFT = 12;
+const LANE_WIDTH = 18;
+const DOT_RADIUS = 4;
+const LABEL_OFFSET = 10;
+
+let currentOffset = 0;
+let totalCommits = 0;
+let allCommits = [];
+let allTags = [];
+let branchColorMap = {};
+let commitPositions = [];
+let commitLaneMap = {};
+let laneColors = [];
+let canvasHeight = 0;
+let currentBranch = '';
+
+const canvas = document.getElementById('graph-canvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('graph-container');
+const labelsContainer = document.getElementById('commit-labels');
+
+const BRANCH_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#84cc16','#14b8a6','#6366f1','#a855f7','#d946ef','#0ea5e9'];
+
+function getBranchColor(branch) {
+  if (!branchColorMap[branch]) {
+    const idx = Object.keys(branchColorMap).length % BRANCH_COLORS.length;
+    branchColorMap[branch] = BRANCH_COLORS[idx];
+  }
+  return branchColorMap[branch];
+}
+
+function assignLanes(commits, branches, existingLaneMap, append) {
+  const laneMap = {}; // hash -> lane (pre-assigned by children)
+  const laneColorMap = {};
+  let nextLane = 0;
+
+  if (branches) {
+    branches.forEach(b => {
+      if (b.color && !branchColorMap[b.name]) {
+        branchColorMap[b.name] = b.color;
+      }
+    });
+  }
+
+  const commitLane = [];
+
+  for (let i = 0; i < commits.length; i++) {
+    const c = commits[i];
+    let lane;
+
+    // If a child already assigned us a lane, use it
+    if (laneMap[c.hash] !== undefined) {
+      lane = laneMap[c.hash];
+    } else {
+      // Otherwise find the leftmost free lane
+      const used = new Set(Object.values(laneMap));
+      lane = 0;
+      while (used.has(lane)) {
+        lane++;
+      }
+      if (lane >= nextLane) {
+        nextLane = lane + 1;
+      }
+    }
+
+    commitLane[i] = lane;
+
+    if (c.parents && c.parents.length > 0) {
+      // First parent continues in this lane
+      const firstParent = c.parents[0];
+      if (laneMap[firstParent] === undefined) {
+        laneMap[firstParent] = lane;
+      }
+
+      // Other parents branch off to new lanes on the right
+      for (let p = 1; p < c.parents.length; p++) {
+        const parentHash = c.parents[p];
+        if (laneMap[parentHash] === undefined) {
+          const used = new Set(Object.values(laneMap));
+          let newLane = nextLane;
+          while (used.has(newLane)) {
+            newLane++;
+          }
+          laneMap[parentHash] = newLane;
+          nextLane = newLane + 1;
         }
+      }
+    }
+  }
 
-        async function loadStatus() {
-            try {
-                const res = await fetch('/status');
-                const data = await res.json();
-                state.currentBranch = data.currentBranch;
-                state.hasUncommitted = data.hasUncommitted;
-                updateBranchIndicator();
-            } catch (err) {
-                console.error('Failed to load status:', err);
-            }
+  const laneCount = nextLane;
+
+  for (let i = 0; i < commits.length; i++) {
+    const lane = commitLane[i];
+    const c = commits[i];
+
+    if (laneColorMap[lane] === undefined) {
+      if (c.branches && c.branches.length > 0) {
+        laneColorMap[lane] = getBranchColor(c.branches[0]);
+      } else {
+        const colorIdx = lane % BRANCH_COLORS.length;
+        laneColorMap[lane] = BRANCH_COLORS[colorIdx];
+      }
+    }
+  }
+
+  return { commitLane, laneCount, laneMap, laneColorMap };
+}
+
+function renderGraph(commits, branches, tags, append) {
+  if (!append) {
+    allCommits = commits;
+    allTags = tags || [];
+    commitPositions = [];
+    commitLaneMap = {};
+    laneColors = [];
+  } else {
+    allCommits = allCommits.concat(commits);
+    allTags = tags || allTags;
+  }
+
+  // Build commit -> tags mapping
+  const commitTagsMap = {};
+  for (const tag of allTags) {
+    if (!commitTagsMap[tag.commitHash]) {
+      commitTagsMap[tag.commitHash] = [];
+    }
+    commitTagsMap[tag.commitHash].push(tag.name);
+  }
+
+  // Assign tags to commits
+  for (const commit of allCommits) {
+    commit.tags = commitTagsMap[commit.hash] || [];
+  }
+
+  const { commitLane, laneCount, laneMap, laneColorMap } = assignLanes(allCommits, branches || [], commitLaneMap, append);
+  commitLaneMap = laneMap;
+  laneColors = laneColorMap;
+
+  const branchHeads = {};
+  if (branches) {
+    branches.forEach(b => {
+      branchHeads[b.headHash] = b.name;
+    });
+  }
+
+  const containerWidth = container.clientWidth || 1200;
+  const labelWidth = Math.min(480, containerWidth * 0.45);
+  const maxGraphWidth = containerWidth - labelWidth - 20;
+  const actualLaneWidth = Math.min(LANE_WIDTH, Math.max(12, (maxGraphWidth - GRAPH_LEFT - 8) / Math.max(laneCount, 1)));
+  const graphAreaWidth = GRAPH_LEFT + (laneCount * actualLaneWidth) + 8;
+  const totalWidth = graphAreaWidth + labelWidth;
+
+  container.style.minWidth = totalWidth + 'px';
+
+  canvas.width = graphAreaWidth;
+  canvas.height = allCommits.length * ROW_HEIGHT;
+  canvasHeight = canvas.height;
+  canvas.style.width = graphAreaWidth + 'px';
+  canvas.style.height = canvasHeight + 'px';
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const lane = commitLane[i];
+    const x = GRAPH_LEFT + (lane * actualLaneWidth) + (actualLaneWidth / 2);
+    const y = (i * ROW_HEIGHT) + (ROW_HEIGHT / 2);
+    commitPositions[i] = { x, y, hash: allCommits[i].hash, shortHash: allCommits[i].shortHash, lane };
+  }
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+
+    if (c.parents && c.parents.length > 0) {
+      for (let p = 0; p < c.parents.length; p++) {
+        const parentHash = c.parents[p];
+        const parentIdx = allCommits.findIndex(p => p.hash === parentHash);
+        if (parentIdx !== -1 && parentIdx > i) {
+          const parentPos = commitPositions[parentIdx];
+          const isMerge = c.parents.length > 1;
+          const isCrossLane = pos.lane !== parentPos.lane;
+
+          let color;
+          if (p === 0) {
+            color = laneColors[pos.lane] || '#9ca3af';
+          } else {
+            color = laneColors[parentPos.lane] || '#9ca3af';
+          }
+
+          ctx.strokeStyle = color;
+          ctx.lineWidth = isMerge ? 2 : 1.5;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.globalAlpha = isMerge ? 0.75 : 0.5;
+          ctx.beginPath();
+
+          const startY = pos.y + DOT_RADIUS + 1;
+          const endY = parentPos.y - DOT_RADIUS - 1;
+          const midY = startY + (endY - startY) / 2;
+
+          // Always use bezier curves for smooth, rounded connections
+          ctx.moveTo(pos.x, startY);
+          ctx.bezierCurveTo(pos.x, midY, parentPos.x, midY, parentPos.x, endY);
+
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
         }
+      }
+    }
+  }
 
-        function updateBranchIndicator() {
-            const indicator = document.getElementById('branch-indicator');
-            const dotClass = state.hasUncommitted ? 'status-dirty' : 'status-clean';
-            indicator.innerHTML = `
-                <span class="status-dot ${dotClass}"></span>
-                <span class="text-slate-300">${escapeHtml(state.currentBranch || 'unknown')}</span>
-            `;
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+
+    const color = laneColors[pos.lane] || '#9ca3af';
+    const isMerge = c.parents && c.parents.length > 1;
+
+    // Draw outer glow/halo for all commits
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, DOT_RADIUS + 2, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.15;
+    ctx.fill();
+    ctx.globalAlpha = 1.0;
+
+    if (isMerge) {
+      // Merge commit: double ring with larger outer ring
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS + 2.5, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      ctx.stroke();
+      ctx.globalAlpha = 1.0;
+
+      // Inner ring
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Center fill
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS - 1, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.4;
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+    } else {
+      // Regular commit: solid dot with subtle gradient effect
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, DOT_RADIUS, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+
+      // Subtle highlight
+      ctx.beginPath();
+      ctx.arc(pos.x - 1, pos.y - 1, DOT_RADIUS / 2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.3)';
+      ctx.fill();
+    }
+  }
+
+  labelsContainer.innerHTML = '';
+  labelsContainer.style.width = labelWidth + 'px';
+  labelsContainer.style.height = canvasHeight + 'px';
+  labelsContainer.style.left = graphAreaWidth + 'px';
+
+  for (let i = 0; i < allCommits.length; i++) {
+    const c = allCommits[i];
+    const pos = commitPositions[i];
+    const label = document.createElement('div');
+    label.className = 'commit-label flex items-center gap-2 px-1.5 py-0.5 rounded transition-colors';
+    label.style.left = '0px';
+    label.style.top = (i * ROW_HEIGHT + 1) + 'px';
+    label.style.height = (ROW_HEIGHT - 2) + 'px';
+    label.style.maxWidth = (labelWidth - 8) + 'px';
+    label.dataset.hash = c.hash;
+
+    let labelPills = '';
+
+    // Branch labels - pill shaped with colored backgrounds
+    if (branchHeads[c.hash]) {
+      const branchName = branchHeads[c.hash];
+      const bColor = getBranchColor(branchName);
+      labelPills += '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold mr-1.5 flex-shrink-0 shadow-sm" style="background-color: ' + bColor + '25; color: ' + bColor + '; border: 1px solid ' + bColor + '40;">' +
+        '<span class="w-1.5 h-1.5 rounded-full mr-1.5" style="background-color: ' + bColor + ';"></span>' +
+        escapeHtml(branchName) + '</span>';
+    }
+
+    // Tag labels - distinct styling (outlined, different shape)
+    if (c.tags && c.tags.length > 0) {
+      c.tags.forEach(tag => {
+        labelPills += '<span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-medium mr-1.5 flex-shrink-0 bg-gray-800 text-amber-400 border border-amber-500/30">' +
+          '<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3v5h8l-3.5 3.5 3.5 3.5H7v5H5V3h2z"/></svg>' +
+          escapeHtml(tag) + '</span>';
+      });
+    }
+
+    label.innerHTML =
+      labelPills +
+      '<span class="font-mono text-[11px] text-gray-500 w-14 flex-shrink-0 tracking-tight">' + escapeHtml(c.shortHash) + '</span>' +
+      '<span class="commit-msg text-[13px] text-gray-300 flex-1 truncate transition-colors ml-2">' + escapeHtml(c.message) + '</span>' +
+      '<span class="text-[11px] text-gray-600 w-16 flex-shrink-0 text-right hidden sm:block">' + relativeDate(c.date) + '</span>';
+
+    label.addEventListener('click', () => showCommitDetail(c.hash));
+    labelsContainer.appendChild(label);
+  }
+
+  document.getElementById('load-more-container').classList.toggle('hidden', currentOffset + PER_PAGE >= totalCommits);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function relativeDate(dateStr) {
+  const parts = dateStr.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+  if (!parts) return dateStr;
+  const date = new Date(+parts[1], +parts[2] - 1, +parts[3], +parts[4], +parts[5], +parts[6]);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return diffMin + 'm ago';
+  if (diffHr < 24) return diffHr + 'h ago';
+  if (diffDay < 30) return diffDay + 'd ago';
+  if (diffDay < 365) return Math.floor(diffDay / 30) + 'mo ago';
+  return Math.floor(diffDay / 365) + 'y ago';
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  for (const pos of commitPositions) {
+    const dx = mx - pos.x;
+    const dy = my - pos.y;
+    const hitRadius = Math.max(DOT_RADIUS + 4, 8);
+    if (dx * dx + dy * dy <= hitRadius * hitRadius) {
+      showCommitDetail(pos.hash);
+      return;
+    }
+  }
+});
+
+async function loadMore() {
+  const btn = document.getElementById('load-more-btn');
+  btn.textContent = 'Loading...';
+  btn.disabled = true;
+
+  try {
+    const newOffset = currentOffset + PER_PAGE;
+    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=' + newOffset);
+    const data = await resp.json();
+    if (data.branches) {
+      data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
+    }
+    currentOffset = newOffset;
+    renderGraph(data.commits, data.branches, data.tags, true);
+  } catch (err) {
+    btn.textContent = 'Error';
+  } finally {
+    btn.textContent = 'Load More';
+    btn.disabled = false;
+  }
+}
+
+async function loadGraph() {
+  try {
+    const resp = await fetch('/graph?limit=' + PER_PAGE + '&offset=0');
+    const data = await resp.json();
+    totalCommits = data.total;
+    document.getElementById('commit-count').textContent = totalCommits + ' commits';
+    
+    // Show tag count
+    const tagCountEl = document.getElementById('tag-count');
+    if (data.tags && data.tags.length > 0) {
+      tagCountEl.textContent = data.tags.length + ' tags';
+      tagCountEl.classList.remove('hidden');
+    } else {
+      tagCountEl.classList.add('hidden');
+    }
+    
+    branchColorMap = {};
+    if (data.branches) {
+      data.branches.forEach(b => { if (b.color) branchColorMap[b.name] = b.color; });
+    }
+    renderGraph(data.commits, data.branches, data.tags, false);
+  } catch (err) {
+    document.getElementById('graph-container').innerHTML =
+       '<p class="text-center py-20 text-red-400">Error loading commits.</p>';
+  }
+}
+
+async function loadStatus() {
+  try {
+    const resp = await fetch('/status');
+    const data = await resp.json();
+    currentBranch = data.currentBranch || '(detached HEAD)';
+    const statusDot = data.hasUncommitted
+      ? '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-500 text-xs font-medium border border-yellow-500/20" title="Uncommitted changes"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>modified</span>'
+      : '<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 text-xs font-medium border border-green-500/20" title="Clean working tree"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>clean</span>';
+    
+    // Build ahead/behind indicators
+    let aheadBehindHtml = '';
+    if (data.branchStatus) {
+      const bs = data.branchStatus;
+      const parts = [];
+      
+      // Show ahead/behind vs main
+      if (bs.aheadOfMain > 0 || bs.behindMain > 0) {
+        if (bs.aheadOfMain > 0) {
+          parts.push('<span class="text-green-400" title="' + bs.aheadOfMain + ' commit(s) ahead of main">↑' + bs.aheadOfMain + '</span>');
         }
-
-        async function loadGraph() {
-            try {
-                const res = await fetch(`/graph?limit=${CONFIG.defaultLimit}&offset=${state.offset}`);
-                const data = await res.json();
-                
-                if (state.offset === 0) {
-                    state.commits = data.commits;
-                } else {
-                    state.commits.push(...data.commits);
-                }
-                state.branches = data.branches;
-                state.total = data.total;
-                state.offset = state.commits.length;
-
-                render();
-                updateLoadMoreButton();
-            } catch (err) {
-                console.error('Failed to load graph:', err);
-            }
+        if (bs.behindMain > 0) {
+          parts.push('<span class="text-red-400" title="' + bs.behindMain + ' commit(s) behind main">↓' + bs.behindMain + '</span>');
         }
-
-        function updateLoadMoreButton() {
-            const container = document.getElementById('load-more-container');
-            const btn = document.getElementById('load-more-btn');
-            const count = document.getElementById('commit-count');
-            
-            if (state.commits.length > 0) {
-                container.classList.remove('hidden');
-                count.textContent = `${state.commits.length} / ${state.total} commits`;
-                
-                if (state.commits.length >= state.total) {
-                    btn.classList.add('hidden');
-                } else {
-                    btn.classList.remove('hidden');
-                }
-            }
+      }
+      
+      // Show ahead/behind vs remote if different from main comparison
+      if (bs.remoteTracking && bs.remoteTracking !== 'origin/main' && bs.remoteTracking !== 'origin/master') {
+        if (bs.aheadOfRemote > 0 || bs.behindRemote > 0) {
+          if (bs.aheadOfRemote > 0) {
+            parts.push('<span class="text-blue-400 text-[10px]" title="' + bs.aheadOfRemote + ' commit(s) ahead of ' + bs.remoteTracking + '">↑' + bs.aheadOfRemote + '</span>');
+          }
+          if (bs.behindRemote > 0) {
+            parts.push('<span class="text-orange-400 text-[10px]" title="' + bs.behindRemote + ' commit(s) behind ' + bs.remoteTracking + '">↓' + bs.behindRemote + '</span>');
+          }
         }
+      }
+      
+      if (parts.length > 0) {
+        aheadBehindHtml = '<span class="flex items-center gap-1.5 text-xs font-mono bg-gray-800/50 px-1.5 py-0.5 rounded border border-gray-700/50">' + parts.join('') + '</span>';
+      }
+    }
+    
+    document.getElementById('branch-indicator').innerHTML =
+      statusDot + '<span class="font-mono text-xs text-gray-300 bg-gray-800 px-2 py-0.5 rounded-md border border-gray-700">' + currentBranch + '</span>' + aheadBehindHtml;
+  } catch (err) {
+    document.getElementById('branch-indicator').innerHTML =
+      '<span class="text-red-400 text-xs">Error loading status</span>';
+  }
+}
 
-        function assignLanes() {
-            const laneMap = new Map(); // commit hash -> lane index
-            const activeLanes = new Set(); // lanes currently in use
-            let nextLane = 0;
+document.getElementById('load-more-btn').addEventListener('click', loadMore);
+document.getElementById('refresh-btn').addEventListener('click', refresh);
 
-            state.commits.forEach((commit, index) => {
-                const parents = commit.parents || [];
-                
-                // Find an available lane or create new
-                let lane = -1;
-                
-                // Check if this commit continues an existing lane (it's a parent of a previous commit)
-                for (let i = 0; i < index; i++) {
-                    const prevCommit = state.commits[i];
-                    if (prevCommit.parents && prevCommit.parents.includes(commit.hash)) {
-                        const parentLane = laneMap.get(prevCommit.hash);
-                        if (parentLane !== undefined && !activeLanes.has(parentLane)) {
-                            lane = parentLane;
-                            break;
-                        }
-                    }
-                }
+async function refresh() {
+  const btn = document.getElementById('refresh-btn');
+  const icon = document.getElementById('refresh-icon');
+  btn.disabled = true;
+  icon.classList.add('spin');
 
-                // If no continuing lane, find free lane or create new
-                if (lane === -1) {
-                    for (let i = 0; i < nextLane; i++) {
-                        if (!activeLanes.has(i)) {
-                            lane = i;
-                            break;
-                        }
-                    }
-                    if (lane === -1) {
-                        lane = nextLane++;
-                    }
-                }
+  try {
+    currentOffset = 0;
+    allCommits = [];
+    allTags = [];
+    branchColorMap = {};
+    commitLaneMap = {};
+    laneColors = [];
+    await Promise.all([loadGraph(), loadStatus()]);
+  } finally {
+    btn.disabled = false;
+    icon.classList.remove('spin');
+  }
+}
 
-                laneMap.set(commit.hash, lane);
-                activeLanes.add(lane);
+loadStatus();
+loadGraph();
 
-                // Mark lanes of parents as in-use for next commits
-                activeLanes.clear();
-                state.commits.slice(0, index + 1).forEach(c => {
-                    if (c.parents) {
-                        c.parents.forEach(p => {
-                            const pLane = laneMap.get(p);
-                            if (pLane !== undefined) {
-                                activeLanes.add(pLane);
-                            }
-                        });
-                    }
-                });
-            });
+function showCommitDetail(hash) {
+  const overlay = document.getElementById('detail-overlay');
+  const content = document.getElementById('detail-content');
+  const panel = document.getElementById('detail-panel');
 
-            state.laneCount = nextLane;
-            return laneMap;
-        }
+  overlay.classList.remove('hidden');
+  panel.classList.remove('translate-x-full');
+  panel.classList.add('translate-x-0');
+  content.innerHTML = '<p class="text-gray-500">Loading...</p>';
 
-        function render() {
-            const laneMap = assignLanes();
-            state.commitPositions.clear();
+  fetch('/commit/' + hash)
+    .then(resp => resp.json())
+    .then(data => {
+      if (data.error) {
+        content.innerHTML = '<p class="text-red-400">Error: ' + data.error + '</p>';
+        return;
+      }
+      let html = '';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Commit Hash</span><p class="font-mono text-sm text-amber-500 break-all mt-1.5 bg-gray-800/50 px-3 py-2 rounded-lg border border-gray-700/50">' + data.hash + '</p></div>';
+      html += '<div class="mb-5"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Message</span><p class="text-sm text-gray-200 mt-1.5 whitespace-pre-wrap bg-gray-800/30 px-3 py-2 rounded-lg border border-gray-800/50">' + data.message + '</p></div>';
+      html += '<div class="grid grid-cols-2 gap-4 mb-5">';
+      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Author</span><p class="text-sm text-gray-200 mt-1.5">' + data.author + '</p></div>';
+      html += '<div><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Date</span><p class="text-sm text-gray-200 mt-1.5">' + data.date + '</p></div>';
+      html += '</div>';
 
-            const width = Math.max(
-                container.clientWidth,
-                CONFIG.leftPadding + (state.laneCount * CONFIG.laneWidth) + CONFIG.rightPadding + 400
-            );
-            const height = state.commits.length * CONFIG.commitHeight + 20;
+      if (data.files && data.files.length > 0) {
+        html += '<div class="mb-3"><span class="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Files Changed</span><span class="ml-2 px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 text-xs">' + data.files.length + '</span></div>';
+        html += '<div class="border border-gray-800 rounded-lg overflow-hidden bg-gray-800/20">';
+        data.files.forEach(f => {
+          html += '<div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-800 last:border-b-0 text-sm hover:bg-gray-800/40 transition-colors">';
+          html += '<span class="text-gray-300 font-mono text-xs truncate mr-3">' + f.path + '</span>';
+          html += '<span class="flex items-center gap-2 flex-shrink-0 text-xs font-medium">';
+          if (f.additions > 0) html += '<span class="text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">+' + f.additions + '</span>';
+          if (f.deletions > 0) html += '<span class="text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">-' + f.deletions + '</span>';
+          if (f.additions === 0 && f.deletions === 0) html += '<span class="text-gray-500">Binary</span>';
+          html += '</span></div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<p class="text-sm text-gray-500">No files changed.</p>';
+      }
 
-            canvas.width = width;
-            canvas.height = height;
-            canvas.style.width = width + 'px';
-            canvas.style.height = height + 'px';
+      content.innerHTML = html;
+    })
+    .catch(err => {
+      content.innerHTML = '<p class="text-red-400">Error loading commit detail.</p>';
+    });
+}
 
-            ctx.clearRect(0, 0, width, height);
+function hideCommitDetail() {
+  const overlay = document.getElementById('detail-overlay');
+  const panel = document.getElementById('detail-panel');
 
-            // Draw branch lines first (behind commits)
-            drawBranchLines(laneMap);
+  panel.classList.remove('translate-x-0');
+  panel.classList.add('translate-x-full');
 
-            // Draw commits
-            state.commits.forEach((commit, index) => {
-                const y = index * CONFIG.commitHeight + CONFIG.commitHeight / 2;
-                const lane = laneMap.get(commit.hash) || 0;
-                const x = CONFIG.leftPadding + (lane * CONFIG.laneWidth);
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+  }, 200);
+}
 
-                state.commitPositions.set(commit.hash, { x, y, index, commit });
+document.getElementById('detail-close').addEventListener('click', hideCommitDetail);
+document.getElementById('detail-backdrop').addEventListener('click', hideCommitDetail);
 
-                const isMerge = commit.parents && commit.parents.length > 1;
-                const color = getBranchColor(commit);
+// Auto-refresh via Server-Sent Events
+let eventSource = null;
+let reconnectTimeout = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_BASE = 1000; // Start with 1 second
 
-                // Draw dot
-                ctx.beginPath();
-                if (isMerge) {
-                    ctx.arc(x, y, CONFIG.mergeDotRadius, 0, Math.PI * 2);
-                    ctx.strokeStyle = color;
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.arc(x, y, CONFIG.mergeDotRadius - 3, 0, Math.PI * 2);
-                    ctx.fillStyle = color;
-                    ctx.fill();
-                } else {
-                    ctx.arc(x, y, CONFIG.dotRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = color;
-                    ctx.fill();
-                }
+function connectEventSource() {
+  // Close existing connection
+  if (eventSource) {
+    eventSource.close();
+  }
 
-                // Draw selection highlight
-                if (state.selectedHash === commit.hash) {
-                    ctx.beginPath();
-                    ctx.arc(x, y, (isMerge ? CONFIG.mergeDotRadius : CONFIG.dotRadius) + 4, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#fbbf24';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                }
+  // Don't reconnect if too many failed attempts
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log('Auto-refresh: Max reconnection attempts reached');
+    return;
+  }
 
-                // Draw commit info
-                drawCommitInfo(commit, x + 20, y, color);
-            });
-        }
+  eventSource = new EventSource('/events');
 
-        function drawBranchLines(laneMap) {
-            const hashToIndex = new Map();
-            state.commits.forEach((c, i) => hashToIndex.set(c.hash, i));
+  eventSource.onopen = function() {
+    reconnectAttempts = 0;
+    document.getElementById('auto-refresh-indicator').classList.remove('hidden');
+    document.getElementById('auto-refresh-indicator').classList.add('flex');
+  };
 
-            ctx.lineWidth = CONFIG.lineWidth;
+  eventSource.onmessage = function(event) {
+    // Handle any non-event messages (rarely used)
+  };
 
-            state.commits.forEach((commit, index) => {
-                const y1 = index * CONFIG.commitHeight + CONFIG.commitHeight / 2;
-                const lane1 = laneMap.get(commit.hash) || 0;
-                const x1 = CONFIG.leftPadding + (lane1 * CONFIG.laneWidth);
+  eventSource.addEventListener('connected', function(event) {
+    console.log('Auto-refresh: Connected to server');
+  });
 
-                if (commit.parents) {
-                    commit.parents.forEach((parentHash, parentIdx) => {
-                        const parentIndex = hashToIndex.get(parentHash);
-                        if (parentIndex === undefined) return;
+  eventSource.addEventListener('refresh', function(event) {
+    console.log('Auto-refresh: Git changes detected, refreshing...');
+    // Trigger smooth refresh
+    refresh();
+  });
 
-                        const y2 = parentIndex * CONFIG.commitHeight + CONFIG.commitHeight / 2;
-                        const lane2 = laneMap.get(parentHash) || 0;
-                        const x2 = CONFIG.leftPadding + (lane2 * CONFIG.laneWidth);
+  eventSource.onerror = function(error) {
+    console.log('Auto-refresh: Connection error');
+    document.getElementById('auto-refresh-indicator').classList.add('hidden');
+    document.getElementById('auto-refresh-indicator').classList.remove('flex');
+    
+    // Schedule reconnection with exponential backoff
+    if (eventSource.readyState === EventSource.CLOSED) {
+      reconnectAttempts++;
+      const delay = RECONNECT_DELAY_BASE * Math.pow(2, reconnectAttempts - 1);
+      console.log('Auto-refresh: Reconnecting in ' + delay + 'ms (attempt ' + reconnectAttempts + '/' + MAX_RECONNECT_ATTEMPTS + ')');
+      
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+      reconnectTimeout = setTimeout(connectEventSource, delay);
+    }
+  };
+}
 
-                        const color = getBranchColor(commit);
-                        ctx.strokeStyle = color;
+// Start auto-refresh connection
+connectEventSource();
 
-                        // Draw curved line
-                        ctx.beginPath();
-                        ctx.moveTo(x1, y1);
-                        
-                        const midY = (y1 + y2) / 2;
-                        
-                        if (lane1 === lane2) {
-                            // Same lane - straight line
-                            ctx.lineTo(x2, y2);
-                        } else {
-                            // Different lanes - bezier curve
-                            ctx.bezierCurveTo(x1, midY, x2, midY, x2, y2);
-                        }
-                        
-                        ctx.stroke();
-                    });
-                }
-            });
-        }
-
-        function getBranchColor(commit) {
-            if (!commit.branches || commit.branches.length === 0) {
-                return '#64748b'; // Default slate color
-            }
-            
-            const branchName = commit.branches[0];
-            const branch = state.branches.find(b => b.name === branchName);
-            return branch ? branch.color : '#64748b';
-        }
-
-        function drawCommitInfo(commit, x, y, color) {
-            ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
-            ctx.textBaseline = 'middle';
-
-            // Short hash
-            ctx.fillStyle = '#64748b';
-            ctx.fillText(commit.shortHash, x, y);
-
-            // Message
-            ctx.fillStyle = '#e2e8f0';
-            const msgX = x + 70;
-            const maxMsgWidth = 300;
-            let message = commit.message.split('\n')[0];
-            const msgWidth = ctx.measureText(message).width;
-            if (msgWidth > maxMsgWidth) {
-                message = message.substring(0, 40) + '...';
-            }
-            ctx.fillText(message, msgX, y);
-
-            // Branch labels
-            if (commit.branches && commit.branches.length > 0) {
-                let labelX = msgX + Math.min(ctx.measureText(message).width, maxMsgWidth) + 12;
-                commit.branches.forEach(branchName => {
-                    const branch = state.branches.find(b => b.name === branchName);
-                    if (branch) {
-                        const label = branchName === state.currentBranch ? `${branchName} *` : branchName;
-                        const width = ctx.measureText(label).width + 8;
-                        
-                        ctx.fillStyle = branch.color + '33'; // Add transparency
-                        ctx.fillRect(labelX, y - 8, width, 16);
-                        
-                        ctx.fillStyle = branch.color;
-                        ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
-                        ctx.fillText(label, labelX + 4, y);
-                        ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
-                        
-                        labelX += width + 4;
-                    }
-                });
-            }
-
-            // Author and date
-            ctx.fillStyle = '#94a3b8';
-            ctx.font = '11px ui-sans-serif, system-ui, sans-serif';
-            ctx.fillText(`${commit.author} - ${commit.date}`, x, y + 14);
-        }
-
-        function setupEventListeners() {
-            canvas.addEventListener('click', handleCanvasClick);
-            document.getElementById('refresh-btn').addEventListener('click', () => {
-                state.offset = 0;
-                loadStatus();
-                loadGraph();
-            });
-            document.getElementById('load-more-btn').addEventListener('click', loadGraph);
-            document.getElementById('close-detail').addEventListener('click', closeDetailPanel);
-            window.addEventListener('resize', render);
-        }
-
-        function handleCanvasClick(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left + container.scrollLeft;
-            const y = e.clientY - rect.top + container.scrollTop;
-
-            let clickedCommit = null;
-            for (const [hash, pos] of state.commitPositions) {
-                const dx = x - pos.x;
-                const dy = y - pos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                // Check if click is near the commit dot or in the row
-                if (dist < 15 || (y > pos.y - CONFIG.commitHeight/2 && y < pos.y + CONFIG.commitHeight/2 && x < pos.x + 500)) {
-                    clickedCommit = pos.commit;
-                    break;
-                }
-            }
-
-            if (clickedCommit) {
-                selectCommit(clickedCommit);
-            }
-        }
-
-        function selectCommit(commit) {
-            state.selectedHash = commit.hash;
-            render();
-            showCommitDetails(commit);
-        }
-
-        async function showCommitDetails(commit) {
-            const panel = document.getElementById('detail-panel');
-            const content = document.getElementById('detail-content');
-            
-            panel.classList.remove('closed');
-            content.innerHTML = '<p class="text-slate-500 text-sm">Loading...</p>';
-
-            try {
-                const res = await fetch(`/commit/${commit.hash}`);
-                const detail = await res.json();
-                renderDetailContent(detail);
-            } catch (err) {
-                content.innerHTML = '<p class="text-red-400 text-sm">Failed to load commit details</p>';
-            }
-        }
-
-        function renderDetailContent(detail) {
-            const content = document.getElementById('detail-content');
-            
-            const filesHtml = detail.files && detail.files.length > 0
-                ? detail.files.map(f => `
-                    <div class="flex justify-between items-center py-1 text-xs border-b border-slate-700/50 last:border-0">
-                        <span class="text-slate-300 truncate flex-1">${escapeHtml(f.path)}</span>
-                        <span class="ml-2">
-                            <span class="file-addition">+${f.additions}</span>
-                            <span class="file-deletion">-${f.deletions}</span>
-                        </span>
-                    </div>
-                `).join('')
-                : '<p class="text-slate-500 text-xs">No file changes</p>';
-
-            content.innerHTML = `
-                <div class="space-y-4">
-                    <div>
-                        <label class="text-xs text-slate-500 uppercase">Hash</label>
-                        <p class="text-sm font-mono text-amber-400">${detail.hash}</p>
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-500 uppercase">Message</label>
-                        <p class="text-sm text-slate-200 whitespace-pre-wrap">${escapeHtml(detail.message)}</p>
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-500 uppercase">Author</label>
-                        <p class="text-sm text-slate-300">${escapeHtml(detail.author)}</p>
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-500 uppercase">Date</label>
-                        <p class="text-sm text-slate-300">${detail.date}</p>
-                    </div>
-                    <div>
-                        <label class="text-xs text-slate-500 uppercase">Files Changed (${detail.files ? detail.files.length : 0})</label>
-                        <div class="mt-2 space-y-1">
-                            ${filesHtml}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function closeDetailPanel() {
-            document.getElementById('detail-panel').classList.add('closed');
-            state.selectedHash = null;
-            render();
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // Start
-        init();
-    </script>
+// Clean up on page unload
+window.addEventListener('beforeunload', function() {
+  if (eventSource) {
+    eventSource.close();
+  }
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+  }
+});
+</script>
 </body>
 </html>

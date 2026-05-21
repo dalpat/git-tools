@@ -88,14 +88,14 @@ if [[ "$USE_EXISTING" == "false" ]]; then
     else
         echo "{
   \"api_key\": \"$API_KEY\",
-  \"model\": \"llama-3.3-70b-versatile\"
+  \"model\": \"openai/gpt-oss-120b\"
 }" > "$SHARED_CONFIG"
         echo "Created $SHARED_CONFIG with API key"
     fi
 fi
 
-read -p "Enter Groq model (default: llama-3.3-70b-versatile): " MODEL
-MODEL="${MODEL:-llama-3.3-70b-versatile}"
+read -p "Enter Groq model (default: openai/gpt-oss-120b): " MODEL
+MODEL="${MODEL:-openai/gpt-oss-120b}"
 
 if [[ ! -f "$SHARED_CONFIG" ]] || [[ "$USE_EXISTING" == "false" ]]; then
     if [[ -n "$EXISTING_KEY" ]]; then
@@ -151,13 +151,24 @@ fi
 if [[ "$INSTALL_GRAPH" == "true" ]]; then
     echo "Installing think-git-graph..."
 
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    if command -v go &> /dev/null && [[ -f "${SCRIPT_DIR}/think-git-graph/go.mod" ]]; then
-        echo "Building from source..."
-        (cd "${SCRIPT_DIR}/think-git-graph" && go build -o "${INSTALL_DIR}/think-git-graph" .)
+    if command -v go &> /dev/null; then
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+        if [[ -f "${SCRIPT_DIR}/think-git-graph/go.mod" ]]; then
+            echo "Building from local source..."
+            (cd "${SCRIPT_DIR}/think-git-graph" && go build -o "${INSTALL_DIR}/think-git-graph" .)
+        else
+            echo "Downloading source and building..."
+            TMP_DIR=$(mktemp -d)
+            curl -fsL "https://github.com/dalpat/git-tools/archive/refs/heads/main.tar.gz" -o "${TMP_DIR}/git-tools.tar.gz"
+            tar -xzf "${TMP_DIR}/git-tools.tar.gz" -C "${TMP_DIR}"
+            (cd "${TMP_DIR}/git-tools-main/think-git-graph" && go build -o "${INSTALL_DIR}/think-git-graph" .)
+            rm -rf "${TMP_DIR}"
+        fi
+        chmod +x "${INSTALL_DIR}/think-git-graph"
         echo "think-git-graph built and installed"
     else
-        echo "Downloading pre-built binary..."
+        echo "Go not found. Downloading pre-built binary..."
         GO_BIN_URL="${REPO_URL}/think-git-graph/think-git-graph"
         curl -sL "${GO_BIN_URL}" -o "${INSTALL_DIR}/think-git-graph"
         chmod +x "${INSTALL_DIR}/think-git-graph"

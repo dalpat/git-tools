@@ -37,6 +37,16 @@ type CommitDetailResponse struct {
 	Files   []gitdata.FileChange `json:"files"`
 }
 
+// noCache wraps an http.Handler to disable browser caching for static assets
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Server represents the HTTP server
 type Server struct {
 	gd            *gitdata.GitData
@@ -68,7 +78,7 @@ func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	mux.Handle("/", http.FileServer(http.FS(staticFS)))
+	mux.Handle("/", noCache(http.FileServer(http.FS(staticFS))))
 
 	s.handler = mux
 	return s, nil
