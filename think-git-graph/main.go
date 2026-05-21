@@ -22,8 +22,14 @@ import (
 //go:embed static/*
 var staticFiles embed.FS
 
+var (
+	detach = flag.Bool("detach", false, "run server in background")
+	port   = flag.String("port", "", "port to listen on (default: random)")
+	host   = flag.String("host", "127.0.0.1", "host to bind to")
+	noOpen = flag.Bool("no-open", false, "do not open browser automatically")
+)
+
 func main() {
-	detach := flag.Bool("detach", false, "run server in background")
 	flag.Parse()
 
 	if *detach {
@@ -43,7 +49,14 @@ func runDetached() {
 	urlFile := filepath.Join(os.TempDir(), "think-git-graph.url")
 	os.Remove(urlFile)
 
-	cmd := exec.Command(exe)
+	// Pass through non-detach flags to the background process
+	var args []string
+	for _, arg := range os.Args[1:] {
+		if arg != "--detach" && arg != "-detach" {
+			args = append(args, arg)
+		}
+	}
+	cmd := exec.Command(exe, args...)
 	cmd.Env = append(os.Environ(), "THINK_GIT_GRAPH_QUIET=1")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -85,12 +98,16 @@ func runServer() {
 		log.Fatalf("failed to create server: %v", err)
 	}
 
-	port, err := srv.Start()
+	addr := fmt.Sprintf("%s:0", *host)
+	if *port != "" {
+		addr = fmt.Sprintf("%s:%s", *host, *port)
+	}
+	portNum, err := srv.Start(addr)
 	if err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 
-	url := fmt.Sprintf("http://localhost:%d", port)
+	url := fmt.Sprintf("http://%s:%d", *host, portNum)
 
 	urlFile := filepath.Join(os.TempDir(), "think-git-graph.url")
 	if err := os.WriteFile(urlFile, []byte(url+"\n"), 0644); err != nil {
@@ -121,7 +138,7 @@ func runServer() {
 		log.Printf("continuing without auto-refresh")
 	}
 
-	if !quiet {
+	if !quiet && !*noOpen {
 		if err := openBrowser(url); err != nil {
 			log.Printf("could not open browser: %v", err)
 		}

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"embed"
 	"fmt"
 	"io/fs"
 	"log"
@@ -60,7 +59,7 @@ type Server struct {
 }
 
 // New creates a new Server instance
-func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
+func New(gd *gitdata.GitData, assets fs.FS) (*Server, error) {
 	mux := http.NewServeMux()
 
 	s := &Server{
@@ -85,8 +84,8 @@ func New(gd *gitdata.GitData, assets embed.FS) (*Server, error) {
 }
 
 // Start starts the HTTP server
-func (s *Server) Start() (int, error) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+func (s *Server) Start(addr string) (int, error) {
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return 0, err
 	}

@@ -7,6 +7,14 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>think-git-graph</title>
+<script>
+(function() {
+  var saved = localStorage.getItem('think-git-graph-theme');
+  var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var theme = saved || (prefersDark ? 'dark' : 'light');
+  document.documentElement.setAttribute('data-theme', theme);
+})();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   /* Theme-aware CSS variables */
@@ -261,14 +269,20 @@
   </header>
 
   <div id="graph-container">
-    <canvas id="graph-canvas"></canvas>
-    <div id="commit-labels"></div>
+    <div id="graph-loading" class="flex items-center justify-center py-20">
+      <div class="flex items-center gap-2" style="color: var(--text-muted);">
+        <svg class="w-5 h-5 spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <span class="text-sm">Loading commit graph...</span>
+      </div>
+    </div>
+    <canvas id="graph-canvas" class="hidden"></canvas>
+    <div id="commit-labels" class="hidden"></div>
   </div>
 
   <div id="load-more-container" class="text-center py-6 hidden">
     <button id="load-more-btn" class="px-6 py-2.5 text-sm font-medium rounded-lg transition-all duration-150 hover:shadow-lg flex items-center gap-2 mx-auto">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-      Load More Commits
+      <span id="load-more-text">Load More Commits</span>
     </button>
   </div>
 </div>
@@ -443,6 +457,10 @@ function renderGraph(commits, branches, tags, append) {
     allCommits = allCommits.concat(commits);
     allTags = tags || allTags;
   }
+
+  document.getElementById('graph-loading').classList.add('hidden');
+  canvas.classList.remove('hidden');
+  labelsContainer.classList.remove('hidden');
 
   const commitTagsMap = {};
   for (const tag of allTags) {
@@ -674,7 +692,8 @@ canvas.addEventListener('click', (e) => {
 
 async function loadMore() {
   const btn = document.getElementById('load-more-btn');
-  btn.textContent = 'Loading...';
+  const btnText = document.getElementById('load-more-text');
+  btnText.textContent = 'Loading...';
   btn.disabled = true;
 
   try {
@@ -687,9 +706,9 @@ async function loadMore() {
     currentOffset = newOffset;
     renderGraph(data.commits, data.branches, data.tags, true);
   } catch (err) {
-    btn.textContent = 'Error';
+    btnText.textContent = 'Error';
   } finally {
-    btn.textContent = 'Load More';
+    btnText.textContent = 'Load More';
     btn.disabled = false;
   }
 }
@@ -716,8 +735,11 @@ async function loadGraph() {
     renderGraph(data.commits, data.branches, data.tags, false);
   } catch (err) {
     const t = getThemeColors();
-    document.getElementById('graph-container').innerHTML =
-       '<p class="text-center py-20" style="color: ' + t.errorText + ';">Error loading commits.</p>';
+    document.getElementById('graph-loading').innerHTML =
+      '<div class="text-center py-10">' +
+      '<p class="text-lg font-medium mb-2" style="color: ' + t.errorText + ';">Unable to load commits</p>' +
+      '<p class="text-sm" style="color: ' + t.textMuted + ';">Make sure this is a git repository and that git is installed.</p>' +
+      '</div>';
   }
 }
 
@@ -766,7 +788,7 @@ async function loadStatus() {
   } catch (err) {
     const t = getThemeColors();
     document.getElementById('branch-indicator').innerHTML =
-      '<span class="text-xs" style="color: ' + t.errorText + ';">Error loading status</span>';
+      '<span class="text-xs" style="color: ' + t.errorText + ';">Not a git repository</span>';
   }
 }
 
@@ -906,6 +928,11 @@ function connectEventSource() {
 
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     console.log('Auto-refresh: Max reconnection attempts reached');
+    const indicator = document.getElementById('auto-refresh-indicator');
+    indicator.classList.remove('hidden');
+    indicator.classList.add('flex');
+    indicator.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span><span>auto-off</span>';
+    indicator.title = 'Auto-refresh disabled after connection failures';
     return;
   }
 

@@ -2,19 +2,16 @@ package server
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/dalpat/git-tools/think-git-graph/gitdata"
 )
-
-//go:embed static/*
-var testAssets embed.FS
 
 type mockRunner struct {
 	responses map[string]string
@@ -76,7 +73,7 @@ func TestStatusEndpoint(t *testing.T) {
 			}
 			gd := gitdata.New(mock)
 
-			s, err := New(gd, testAssets)
+			s, err := New(gd, os.DirFS(".."))
 			if err != nil {
 				t.Fatalf("New() error = %v", err)
 			}
@@ -110,7 +107,7 @@ func TestStaticFileServing(t *testing.T) {
 	}
 	gd := gitdata.New(mock)
 
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -148,7 +145,7 @@ func TestGraphEndpoint(t *testing.T) {
 	}
 
 	gd := gitdata.New(mock)
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -195,7 +192,7 @@ func TestGraphEndpointPagination(t *testing.T) {
 	}
 
 	gd := gitdata.New(mock)
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -234,7 +231,7 @@ func TestGraphEndpointDefaults(t *testing.T) {
 	}
 
 	gd := gitdata.New(mock)
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -268,12 +265,12 @@ func TestStartStop(t *testing.T) {
 	}
 	gd := gitdata.New(mock)
 
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	port, err := s.Start()
+	port, err := s.Start("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
@@ -313,7 +310,7 @@ func TestCommitDetailEndpoint(t *testing.T) {
 	}
 	gd := gitdata.New(mock)
 
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -365,7 +362,7 @@ func TestCommitDetailEndpointNotFound(t *testing.T) {
 	}
 	gd := gitdata.New(mock)
 
-	s, err := New(gd, testAssets)
+	s, err := New(gd, os.DirFS(".."))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
